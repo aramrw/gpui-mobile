@@ -1,27 +1,30 @@
-//! Settings screen — toggle dark mode and other preferences.
-//!
-//! This screen demonstrates interactive toggles and controls that mutate shared
-//! state on the `Router` and trigger re-renders via `cx.notify()`.
+use gpui::{
+    Context, Entity, IntoElement, ParentElement, Styled,
+    div, rgb, AppContext, InteractiveElement,
+};
+use gpui_mobile::components::material::MaterialTheme;
+use crate::GlobalYomichan;
+use super::Router;
 
-use gpui::{div, prelude::*, px, rgb, App, MouseDownEvent, Window};
+pub struct SettingsState {}
 
-use super::{Router, BLUE, GREEN, LIGHT_CARD_BG, LIGHT_DIVIDER, LIGHT_SUBTEXT, LIGHT_TEXT, MANTLE, MAUVE, PEACH, RED, SURFACE0, SURFACE1, TEXT, YELLOW};
+impl SettingsState {
+    pub fn new(_window: &mut gpui::Window, _cx: &mut Context<Self>) -> Self {
+        Self {}
+    }
+}
 
-/// Render the Settings screen content area.
-///
-/// Takes a mutable reference to the `Router` (for `cx.listener` closures that
-/// mutate settings) and the GPUI context.
-pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoElement {
+pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
     let dark_mode = router.dark_mode;
-    let text_color = if dark_mode { TEXT } else { LIGHT_TEXT };
-    let sub_text = if dark_mode { super::SUBTEXT } else { LIGHT_SUBTEXT };
-    let card_bg = if dark_mode { SURFACE0 } else { LIGHT_CARD_BG };
-    let divider_color = if dark_mode { SURFACE1 } else { LIGHT_DIVIDER };
+    let theme = MaterialTheme::from_appearance(dark_mode);
+    let text_color = theme.on_surface;
+    let sub_text = theme.on_surface_variant;
+    let card_bg = theme.surface_container_high;
 
     div()
         .flex()
         .flex_col()
-        .flex_1()
+        .size_full()
         .gap_4()
         .px_4()
         .py_6()
@@ -29,144 +32,54 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
         .child(section_header("Appearance", sub_text))
         .child(
             settings_card(card_bg)
-                // Dark mode toggle
                 .child(toggle_row(
-                    "[*]",
                     "Dark Mode",
                     "Use a dark colour scheme",
                     dark_mode,
                     text_color,
                     sub_text,
-                    cx.listener(|this, _event, _window, cx| {
+                    theme,
+                    cx.listener(|this, _, _, cx| {
                         this.dark_mode = !this.dark_mode;
                         cx.notify();
                     }),
                 ))
-                .child(divider(divider_color)),
-        )
-        // ── Section: Counter ─────────────────────────────────────────────
-        .child(section_header("Counter", sub_text))
-        .child(
-            settings_card(card_bg)
-                // Reset counter
-                .child(action_row(
-                    "[R]",
-                    "Reset Counter",
-                    "Set the counter back to zero",
-                    RED,
-                    text_color,
-                    sub_text,
-                    cx.listener(|this, _event, _window, cx| {
-                        this.tap_count = 0;
-                        cx.notify();
-                    }),
-                ))
-                .child(divider(divider_color))
-                // Set counter to 100
-                .child(action_row(
-                    "100",
-                    "Set to 100",
-                    "Jump the counter to 100",
-                    PEACH,
-                    text_color,
-                    sub_text,
-                    cx.listener(|this, _event, _window, cx| {
-                        this.tap_count = 100;
-                        cx.notify();
-                    }),
-                ))
-                .child(divider(divider_color))
-                // Set counter to 500
-                .child(action_row(
-                    "[^]",
-                    "Set to 500",
-                    "Jump the counter to 500",
-                    YELLOW,
-                    text_color,
-                    sub_text,
-                    cx.listener(|this, _event, _window, cx| {
-                        this.tap_count = 500;
-                        cx.notify();
-                    }),
-                )),
         )
         // ── Section: Profile ─────────────────────────────────────────────
         .child(section_header("Profile", sub_text))
-        .child(settings_card(card_bg).child(action_row(
-            "[U]",
-            "Change Name",
-            &format!("Currently: {}", router.user_name),
-            BLUE,
-            text_color,
-            sub_text,
-            cx.listener(|this, _event, _window, cx| {
-                // Cycle through a few demo names.
-                let names = ["Android", "GPUI User", "Rustacean", "Mobile Dev"];
-                let current_idx = names
-                    .iter()
-                    .position(|n| *n == this.user_name.as_ref())
-                    .unwrap_or(0);
-                let next_idx = (current_idx + 1) % names.len();
-                this.user_name = names[next_idx].into();
-                cx.notify();
-            }),
-        )))
-        // ── Section: Theme Preview ───────────────────────────────────────
-        .child(section_header("Theme Preview", sub_text))
         .child(
-            settings_card(card_bg).child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_3()
-                    .p_3()
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(rgb(sub_text))
-                            .child(if dark_mode {
-                                "Google Material (Dark)"
-                            } else {
-                                "Google Material (Light)"
-                            }),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_row()
-                            .gap_2()
-                            .child(colour_chip(BLUE, "Blue"))
-                            .child(colour_chip(GREEN, "Green"))
-                            .child(colour_chip(MAUVE, "Mauve"))
-                            .child(colour_chip(YELLOW, "Yellow"))
-                            .child(colour_chip(PEACH, "Peach"))
-                            .child(colour_chip(RED, "Red")),
-                    ),
-            ),
+            settings_card(card_bg)
+                .child(action_row(
+                    "Current Profile",
+                    &format!("Currently: {}", cx.read_global(|g: &GlobalYomichan, _| {
+                        let opts = g.read().options();
+                        let opts_guard = opts.read();
+                        opts_guard.profiles.get_index(opts_guard.current_profile).map(|(k, _)| k.clone()).unwrap_or_else(|| "Default".to_string())
+                    })),
+                    theme,
+                    cx.listener(|_, _, _, _| {
+                        // TODO: Implement profile switching
+                    }),
+                ))
         )
-        // ── Footer ───────────────────────────────────────────────────────
         .child(
             div()
                 .mt_4()
                 .text_xs()
                 .text_center()
                 .text_color(rgb(sub_text))
-                .child("Settings are stored in memory only"),
+                .child("Ported from ycd-rs")
         )
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/// Section header label.
-fn section_header(title: &str, color: u32) -> impl IntoElement {
+fn section_header(title: &str, color_val: u32) -> impl IntoElement {
     div()
         .text_xs()
-        .text_color(rgb(color))
+        .text_color(rgb(color_val))
         .px_1()
         .child(title.to_string().to_uppercase())
 }
 
-/// A rounded card container for settings rows.
 fn settings_card(bg: u32) -> gpui::Div {
     div()
         .flex()
@@ -176,24 +89,18 @@ fn settings_card(bg: u32) -> gpui::Div {
         .overflow_hidden()
 }
 
-/// A horizontal divider line.
-fn divider(color: u32) -> impl IntoElement {
-    div().w_full().h(px(1.0)).bg(rgb(color)).mx_3()
-}
-
-/// A row with a toggle indicator (on/off).
 fn toggle_row(
-    icon: &str,
     title: &str,
     description: &str,
     is_on: bool,
     text_color: u32,
     sub_text: u32,
-    handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+    theme: MaterialTheme,
+    handler: impl Fn(&gpui::MouseDownEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> impl IntoElement {
-    let toggle_bg = if is_on { GREEN } else { SURFACE1 };
+    let toggle_bg = if is_on { theme.primary } else { theme.on_surface_variant };
     let toggle_label = if is_on { "ON" } else { "OFF" };
-    let toggle_text = if is_on { MANTLE } else { sub_text };
+    let toggle_text = if is_on { theme.on_primary } else { theme.on_surface_variant };
 
     div()
         .flex()
@@ -202,7 +109,6 @@ fn toggle_row(
         .gap_3()
         .px_4()
         .py_3()
-        .child(div().text_xl().child(icon.to_string()))
         .child(
             div()
                 .flex()
@@ -235,15 +141,11 @@ fn toggle_row(
         .on_mouse_down(gpui::MouseButton::Left, handler)
 }
 
-/// A row with a tappable action.
 fn action_row(
-    icon: &str,
     title: &str,
     description: &str,
-    accent: u32,
-    text_color: u32,
-    sub_text: u32,
-    handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+    theme: MaterialTheme,
+    handler: impl Fn(&gpui::MouseDownEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> impl IntoElement {
     div()
         .flex()
@@ -252,7 +154,6 @@ fn action_row(
         .gap_3()
         .px_4()
         .py_3()
-        .child(div().text_xl().child(icon.to_string()))
         .child(
             div()
                 .flex()
@@ -262,32 +163,16 @@ fn action_row(
                 .child(
                     div()
                         .text_base()
-                        .text_color(rgb(text_color))
+                        .text_color(rgb(theme.on_surface))
                         .child(title.to_string()),
                 )
                 .child(
                     div()
                         .text_xs()
-                        .text_color(rgb(sub_text))
+                        .text_color(rgb(theme.on_surface_variant))
                         .child(description.to_string()),
                 ),
         )
-        .child(div().text_sm().text_color(rgb(accent)).child("→"))
+        .child(div().text_sm().text_color(rgb(theme.primary)).child("→"))
         .on_mouse_down(gpui::MouseButton::Left, handler)
-}
-
-/// A small colour chip with a label underneath.
-fn colour_chip(color: u32, label: &str) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_col()
-        .items_center()
-        .gap_1()
-        .child(div().size_8().rounded_lg().bg(rgb(color)))
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(color))
-                .child(label.to_string()),
-        )
 }
