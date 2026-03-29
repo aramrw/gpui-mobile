@@ -172,7 +172,7 @@ pub fn render(
                         div().px_4().child("No results found.")
                     } else if let Some(selected_index) = selected_index {
                         if let Some(segment) = results.get(selected_index) {
-                            div().flex().flex_col().gap_2().px_2().children(
+                            div().flex().flex_col().gap_1().px_2().children(
                                 segment
                                     .results
                                     .as_ref()
@@ -216,7 +216,6 @@ fn render_segment_selector(
             .px_2()
             .py_2()
             .children(results.into_iter().enumerate().filter_map(|(i, segment)| {
-                // check first
                 // Filter out segments that are just whitespace or empty
                 if segment.text.trim().is_empty() {
                     return None;
@@ -240,7 +239,7 @@ fn render_segment_selector(
                         } else {
                             theme.on_surface
                         }))
-                        .text_lg()
+                        .text_xl()
                         .font_weight(gpui::FontWeight::BOLD)
                         .child(text)
                         .on_mouse_down(
@@ -263,11 +262,10 @@ fn render_dictionary_entry(
     entry: &yomichan_rs::TermDictionaryEntry,
     theme: MaterialTheme,
 ) -> impl IntoElement {
-    let headword = entry
-        .headwords
-        .first()
-        .map(|h| format!("{} [{}]", h.term, h.reading))
-        .unwrap_or_default();
+    let headword = entry.headwords.first();
+    let term = headword.map(|h| h.term.clone()).unwrap_or_default();
+    let reading = headword.map(|h| h.reading.clone()).unwrap_or_default();
+
     div()
         .flex()
         .flex_col()
@@ -277,17 +275,23 @@ fn render_dictionary_entry(
         .gap_2()
         .child(
             div()
-                .text_xl()
-                .font_weight(gpui::FontWeight::BOLD)
-                .text_color(rgb(theme.primary))
-                .child(headword),
+                .flex()
+                .flex_col()
+                .child(div().text_sm().text_color(rgb(theme.secondary)).child(reading))
+                .child(
+                    div()
+                        .text_2xl()
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_color(rgb(theme.primary))
+                        .child(term),
+                ),
         )
         .children(entry.definitions.iter().flat_map(|def| {
             def.entries
                 .iter()
                 .map(|gloss| {
                     div()
-                        .text_base()
+                        .text_lg()
                         .text_color(rgb(theme.on_surface))
                         .child(gloss.plain_text.clone())
                 })

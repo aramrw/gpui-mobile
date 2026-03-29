@@ -70,8 +70,8 @@ use super::theme::{color, MaterialTheme};
 /// Search bar height in dp (MD3 spec: 56dp).
 const SEARCH_BAR_HEIGHT: f32 = 56.0;
 
-/// Search bar corner radius (MD3: full shape = 28dp).
-const SEARCH_BAR_RADIUS: f32 = 28.0;
+/// Search bar corner radius (MD3: small rounded = 12dp).
+const SEARCH_BAR_RADIUS: f32 = 12.0;
 
 /// Horizontal padding inside the search bar.
 const SEARCH_BAR_PADDING_H: f32 = 16.0;

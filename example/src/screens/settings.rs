@@ -1,6 +1,6 @@
 use gpui::{
     Context, Entity, IntoElement, ParentElement, Styled,
-    div, rgb, InteractiveElement, StatefulInteractiveElement, AppContext,
+    div, rgb, InteractiveElement, StatefulInteractiveElement,
 };
 use gpui_mobile::components::material::MaterialTheme;
 use crate::GlobalYomichan;
@@ -24,6 +24,26 @@ impl SettingsState {
             }
             let _ = ycd.update_options();
         }
+        cx.notify();
+    }
+
+    pub fn nuke_database(cx: &mut Context<Router>) {
+        let data_dir = gpui_mobile::packages::path_provider::support_directory()
+            .or_else(|_| gpui_mobile::packages::path_provider::documents_directory())
+            .unwrap();
+        
+        log::info!("NUKING DATABASE at {:?}", data_dir);
+        
+        // Note: The database file might be locked if Yomichan is still active.
+        // We try to nuke it anyway. The user should restart the app after this.
+        match yomichan_rs::Yomichan::nuke_database(&data_dir) {
+            Ok(_) => {
+                log::info!("Successfully nuked database. Quitting app for restart.");
+                cx.quit();
+            },
+            Err(e) => log::error!("Failed to nuke database: {}", e),
+        }
+        
         cx.notify();
     }
 }
@@ -102,6 +122,20 @@ pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<
                     )
                 }))
         )
+        // ── Section: Developer ────────────────────────────────────────────
+        .child(section_header("Developer", sub_text))
+        .child(
+            settings_card(card_bg)
+                .child(action_row(
+                    "Nuke Database",
+                    "Delete all dictionary data and settings",
+                    false,
+                    theme,
+                    cx.listener(|_, _, _, cx| {
+                        SettingsState::nuke_database(cx);
+                    }),
+                ))
+        )
         .child(
             div()
                 .mt_4()
@@ -170,9 +204,9 @@ fn toggle_row(
         )
         .child(
             div()
-                .px_3()
-                .py_1()
-                .rounded_full()
+                .px_2()
+                .py_0p5()
+                .rounded_xl()
                 .bg(rgb(toggle_bg))
                 .text_xs()
                 .text_color(rgb(toggle_text))

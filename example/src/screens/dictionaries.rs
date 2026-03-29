@@ -50,6 +50,19 @@ impl DictionariesState {
         cx.notify();
     }
 
+    pub fn remove_dictionary(name: String, cx: &mut Context<Router>) {
+        log::info!("Starting removal of dictionary: {}", name);
+        let global_yomichan = cx.global::<GlobalYomichan>().clone();
+        {
+            let ycd = global_yomichan.write();
+            match ycd.remove_dictionary(&name) {
+                Ok(_) => log::info!("Successfully removed dictionary: {}", name),
+                Err(e) => log::error!("Failed to remove dictionary {}: {}", name, e),
+            }
+        }
+        cx.notify();
+    }
+
     pub fn set_language(lang: String, cx: &mut Context<Router>) {
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         {
@@ -121,8 +134,7 @@ impl DictionariesState {
 }
 
 pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
-    let dark_mode = router.dark_mode;
-    let theme = MaterialTheme::from_appearance(dark_mode);
+    let theme = MaterialTheme::from_appearance(router.dark_mode);
     
     let global_yomichan = cx.global::<GlobalYomichan>().clone();
     let (dictionaries, current_lang) = {
@@ -152,7 +164,8 @@ pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Conte
                 .justify_between()
                 .child(
                     div()
-                        .text_xl()
+                        .text_2xl()
+                        .font_weight(gpui::FontWeight::BOLD)
                         .text_color(rgb(theme.on_surface))
                         .child("Dictionaries")
                 )
@@ -162,7 +175,7 @@ pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Conte
                         .py_2()
                         .bg(rgb(theme.primary))
                         .text_color(rgb(theme.on_primary))
-                        .rounded_lg()
+                        .rounded_xl()
                         .child("Import ZIP")
                         .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
                             DictionariesState::import_dictionary(&state, cx);
@@ -204,7 +217,7 @@ fn lang_chip(label: &str, iso: &str, current: &str, theme: MaterialTheme, cx: &m
     div()
         .px_3()
         .py_1()
-        .rounded_full()
+        .rounded_xl()
         .bg(rgb(if active { theme.primary_container } else { theme.surface_container_high }))
         .text_color(rgb(if active { theme.on_primary_container } else { theme.on_surface }))
         .text_sm()
@@ -216,37 +229,53 @@ fn lang_chip(label: &str, iso: &str, current: &str, theme: MaterialTheme, cx: &m
 
 fn render_dictionary_card(opt: DictionaryOptions, theme: MaterialTheme, cx: &mut Context<Router>) -> impl IntoElement {
     let name = opt.name.clone();
+    let name_clone = name.clone();
     let enabled = opt.enabled;
     
     div()
         .flex()
-        .flex_row()
-        .items_center()
-        .justify_between()
+        .flex_col()
         .bg(rgb(theme.surface_container_high))
         .p_4()
         .rounded_xl()
+        .gap_3()
         .child(
             div()
-                .flex()
-                .flex_col()
-                .child(
-                    div()
-                        .text_lg()
-                        .text_color(rgb(theme.on_surface))
-                        .child(name.clone())
-                )
+                .text_lg()
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(rgb(theme.on_surface))
+                .child(name.clone())
         )
         .child(
             div()
-                .px_4()
-                .py_2()
-                .rounded_full()
-                .bg(rgb(if enabled { theme.primary } else { theme.on_surface_variant }))
-                .text_color(rgb(if enabled { theme.on_primary } else { theme.on_surface }))
-                .child(if enabled { "ON" } else { "OFF" })
-                .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
-                    DictionariesState::toggle_dictionary_enabled(name.clone(), !enabled, cx);
-                }))
+                .flex()
+                .flex_row()
+                .gap_2()
+                .child(
+                    div()
+                        .px_2()
+                        .py_0p5()
+                        .rounded_xl()
+                        .bg(rgb(if enabled { theme.primary } else { theme.on_surface_variant }))
+                        .text_xs()
+                        .text_color(rgb(if enabled { theme.on_primary } else { theme.on_surface }))
+                        .child(if enabled { "ON" } else { "OFF" })
+                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
+                            DictionariesState::toggle_dictionary_enabled(name.clone(), !enabled, cx);
+                        }))
+                )
+                .child(
+                    div()
+                        .px_2()
+                        .py_0p5()
+                        .rounded_xl()
+                        .bg(rgb(theme.error_container))
+                        .text_xs()
+                        .text_color(rgb(theme.on_error_container))
+                        .child("REMOVE")
+                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
+                            DictionariesState::remove_dictionary(name_clone.clone(), cx);
+                        }))
+                )
         )
 }
