@@ -249,13 +249,16 @@ fn open_main_window(cx: &mut App) {
         std::fs::create_dir_all(&data_dir).expect("could not create data dir");
     }
     let yomichan_instance = Yomichan::new(data_dir).expect("Failed to initialize Yomichan");
+    let yomichan_lock = Arc::new(parking_lot::RwLock::new(yomichan_instance.into()));
     
     // Ensure default language is set to avoid panics
     {
-        let mut ycd = yomichan_instance.write();
+        let mut ycd: parking_lot::RwLockWriteGuard<yomichan_rs::Yomichan<'static>> = yomichan_lock.write();
         let current_lang = {
-            let opts = ycd.options().read();
-            let prof = opts.get_current_profile().unwrap().read();
+            let opts_ptr = ycd.options();
+            let opts = opts_ptr.read();
+            let prof_ptr = opts.get_current_profile().unwrap();
+            let prof = prof_ptr.read();
             prof.options().general().language.clone()
         };
         if current_lang.is_empty() {
@@ -264,7 +267,7 @@ fn open_main_window(cx: &mut App) {
         }
     }
 
-    cx.set_global(GlobalYomichan(Arc::new(yomichan_instance.into())));
+    cx.set_global(GlobalYomichan(yomichan_lock));
     log::info!("Successfully initialized GlobalYomichan");
 
     // Check if the app was launched via a deeplink and determine the initial screen.
