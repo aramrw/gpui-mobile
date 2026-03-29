@@ -242,8 +242,8 @@ fn open_main_window(cx: &mut App) {
     log::info!("HTTP client configured successfully");
 
     // Initialize Yomichan
-    let data_dir = gpui_mobile::packages::path_provider::support_directory()
-        .map_err(|e| anyhow::anyhow!("Failed to get support directory: {}", e))
+    let data_dir = gpui_mobile::packages::path_provider::cache_directory()
+        .map_err(|e| anyhow::anyhow!("Failed to get cache directory: {}", e))
         .unwrap();
     if !data_dir.exists() {
         std::fs::create_dir_all(&data_dir).expect("could not create data dir");

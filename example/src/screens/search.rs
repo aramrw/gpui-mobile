@@ -1,6 +1,6 @@
 use gpui::{
-    AsyncApp, AsyncWindowContext, Context, Entity, IntoElement, ParentElement, SharedString, Styled, Task,
-    WeakEntity, div, rgb, AppContext, InteractiveElement, StatefulInteractiveElement,
+    AsyncApp, Context, Entity, IntoElement, ParentElement, Styled, Task,
+    WeakEntity, div, rgb, InteractiveElement, StatefulInteractiveElement,
 };
 use gpui_mobile::components::material::search_bar::SearchBar;
 use gpui_mobile::components::material::MaterialTheme;
@@ -104,15 +104,32 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
                     let async_cx = cx.to_async();
                     show_keyboard();
                     set_text_input_callback(Some(Box::new(move |text| {
+                        if text == "\n" {
+                            gpui_mobile::hide_keyboard();
+                            return;
+                        }
+                        if text == "\x08" {
+                            let search_state_handle = search_state_handle.clone();
+                            let async_cx = async_cx.clone();
+                            async_cx.update(move |cx| {
+                                search_state_handle.update(cx, |state, cx| {
+                                    state.query.pop();
+                                    let q = state.query.clone();
+                                    state.queue_search(&q, cx, true);
+                                    cx.notify();
+                                });
+                            });
+                            return;
+                        }
                         let search_state_handle = search_state_handle.clone();
                         let text = text.to_string();
-                        let mut async_cx = async_cx.clone();
                         
-                        let _ = async_cx.update(|cx| {
+                        let async_cx = async_cx.clone();
+                        async_cx.update(move |cx| {
                             search_state_handle.update(cx, |state, cx| {
                                 state.query.push_str(&text);
                                 let q = state.query.clone();
-                                state.queue_search(&q, cx, false);
+                                state.queue_search(&q, cx, true);
                                 cx.notify();
                             });
                         });
@@ -131,6 +148,9 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
                 .id("search-results")
                 .flex_1()
                 .overflow_y_scroll()
+                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, _| {
+                    gpui_mobile::hide_keyboard();
+                }))
                 .child(if let Some(results) = results {
                     if results.is_empty() {
                         div().px_4().child("No results found.")

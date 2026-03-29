@@ -22,7 +22,6 @@ impl DictionariesState {
         cx: &mut Context<Router>,
     ) {
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
-        
         // Update in memory
         {
             let options_ptr = global_yomichan.read().options();
@@ -61,7 +60,7 @@ impl DictionariesState {
         cx.notify();
     }
 
-    pub fn import_dictionary(cx: &mut Context<Router>) {
+    pub fn import_dictionary(dictionaries_state: &Entity<DictionariesState>, cx: &mut Context<Router>) {
         let options = OpenFileOptions {
             accept_type_groups: vec![TypeGroup {
                 label: "Yomichan Dictionary".into(),
@@ -72,6 +71,7 @@ impl DictionariesState {
         };
 
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
+        let dictionaries_state = dictionaries_state.clone();
         
         cx.spawn(|_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
@@ -79,13 +79,33 @@ impl DictionariesState {
                 match open_file(options).await {
                     Ok(Some(file)) => {
                         let path = PathBuf::from(file.path);
-                        // import_dictionaries takes a slice of paths
-                        let _ = global_yomichan.read().import_dictionaries(&[path]);
-                        let _ = cx.update(|cx: &mut gpui::App| {
-                            let _ = cx.read_global(|g: &GlobalYomichan, _| {
-                                g.write().update_options()
-                            });
-                        });
+                        // import_dictionaries takes a slice of paths.
+                        // We run it on the background executor to avoid freezing the UI.
+                        let global_yomichan = global_yomichan.clone();
+                        log::info!("Starting dictionary import for: {:?}", path);
+                        
+                        let weak_state = dictionaries_state.downgrade();
+                        cx.spawn(|cx: &mut AsyncApp| {
+                            let mut cx = cx.clone();
+                            async move {
+                                let result = cx.background_executor().spawn(async move {
+                                    global_yomichan.read().import_dictionaries(&[path])
+                                }).await;
+
+                                match result {
+                                    Ok(_) => {
+                                        log::info!("Dictionary import completed successfully");
+                                        weak_state.update(&mut cx, |_, cx: &mut Context<'_, DictionariesState>| {
+                                            let _ = cx.read_global(|g: &GlobalYomichan, _| {
+                                                g.write().update_options()
+                                            });
+                                            cx.notify();
+                                        }).ok();
+                                    },
+                                    Err(e) => log::error!("Dictionary import failed: {}", e),
+                                }
+                            }
+                        }).detach();
                     }
                     Err(e) => {
                         log::error!("File picker error: {}", e);
@@ -97,7 +117,7 @@ impl DictionariesState {
     }
 }
 
-pub fn render(_state: &Entity<DictionariesState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
+pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
     
@@ -109,6 +129,8 @@ pub fn render(_state: &Entity<DictionariesState>, router: &Router, cx: &mut Cont
         let profile = profile_ptr.read();
         (profile.options().dictionaries.clone(), profile.options().general().language.clone())
     };
+
+    let state = state.clone();
 
     div()
         .id("dictionaries-page")
@@ -139,8 +161,8 @@ pub fn render(_state: &Entity<DictionariesState>, router: &Router, cx: &mut Cont
                         .text_color(rgb(theme.on_primary))
                         .rounded_lg()
                         .child("Import ZIP")
-                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| {
-                            DictionariesState::import_dictionary(cx);
+                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
+                            DictionariesState::import_dictionary(&state, cx);
                         }))
                 )
         )
