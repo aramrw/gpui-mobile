@@ -102,7 +102,7 @@ targets:
             export PATH="$HOME/.cargo/bin:$PATH"
           fi
 
-          RUST_PROJECT_DIR="${PROJECT_DIR}/../.."
+          RUST_PROJECT_DIR="${PROJECT_DIR}/.."
           cd "${RUST_PROJECT_DIR}"
 
           # Determine the Rust target triple based on Xcode SDK
