@@ -196,26 +196,32 @@ fn render_segment_selector(search_state: &Entity<SearchState>, theme: MaterialTh
             .flex_wrap()
             .gap_2()
             .px_2()
-            .py_1()
-            .children(results.into_iter().enumerate().map(|(i, segment)| {
+            .py_2()
+            .children(results.into_iter().enumerate().filter_map(|(i, segment)| {
+                let text = segment.text.clone();
+                // Filter out segments that are just whitespace or empty
+                if text.trim().is_empty() {
+                    return None;
+                }
+
                 let is_selected = Some(i) == selected_index;
                 let search_state_handle = search_state_handle.clone();
-                let text = segment.text.clone();
                 
-                div()
-                    .px_3()
-                    .py_1()
-                    .rounded_lg()
+                Some(div()
+                    .px_4()
+                    .py_2()
+                    .rounded_xl()
                     .bg(rgb(if is_selected { theme.primary_container } else { theme.surface_container_high }))
                     .text_color(rgb(if is_selected { theme.on_primary_container } else { theme.on_surface }))
-                    .text_sm()
+                    .text_lg()
+                    .font_weight(gpui::FontWeight::BOLD)
                     .child(text)
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
                         let _ = search_state_handle.update(cx, |state, cx| {
                             state.selected_term_index = Some(i);
                             cx.notify();
                         });
-                    }))
+                    })))
             }))
     } else {
         div()
@@ -228,13 +234,13 @@ fn render_dictionary_entry(entry: &yomichan_rs::TermDictionaryEntry, theme: Mate
         .flex()
         .flex_col()
         .bg(rgb(theme.surface_container_high))
-        .p_3()
-        .rounded_xl()
-        .gap_1()
-        .child(div().text_sm().font_weight(gpui::FontWeight::BOLD).text_color(rgb(theme.primary)).child(headword))
+        .p_4()
+        .rounded_2xl()
+        .gap_2()
+        .child(div().text_xl().font_weight(gpui::FontWeight::BOLD).text_color(rgb(theme.primary)).child(headword))
         .children(entry.definitions.iter().flat_map(|def| {
             def.entries.iter().map(|gloss| {
-                div().text_xs().text_color(rgb(theme.on_surface)).child(gloss.plain_text.clone())
+                div().text_base().text_color(rgb(theme.on_surface)).child(gloss.plain_text.clone())
             }).collect::<Vec<_>>()
         }))
 }

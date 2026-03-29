@@ -244,7 +244,7 @@ impl Router {
             tap_count: 0,
             user_name: user_name.into(),
             dark_mode: true,
-            font_size_multiplier: 1.1,
+            font_size_multiplier: 1.2,
             history,
             safe_area,
             search_state,
