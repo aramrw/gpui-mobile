@@ -62,7 +62,7 @@ impl SearchState {
                         .spawn(async move { ycd.write().search(&term) })
                         .await;
 
-                    this_handle
+                    let _ = this_handle
                         .update(&mut cx, |this, cx| {
                             this.search_results = results;
                             if this.selected_term_index.is_none() && this.search_results.is_some() {
@@ -112,7 +112,7 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
                             let search_state_handle = search_state_handle.clone();
                             let async_cx = async_cx.clone();
                             async_cx.update(move |cx| {
-                                search_state_handle.update(cx, |state, cx| {
+                    let _ = search_state_handle.update(cx, |state, cx| {
                                     state.query.pop();
                                     let q = state.query.clone();
                                     state.queue_search(&q, cx, true);
@@ -171,25 +171,33 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
 }
 
 fn render_search_result(res: TermSearchResultsSegment, theme: MaterialTheme) -> impl IntoElement {
-    let definitions_count = res.results.as_ref().map(|r| r.dictionary_entries.len()).unwrap_or(0);
+    let entries = res.results.as_ref().map(|r| r.dictionary_entries.clone()).unwrap_or_default();
+    
     div()
         .flex()
         .flex_col()
         .bg(rgb(theme.surface_container_high))
         .p_4()
         .rounded_xl()
+        .gap_2()
         .child(
             div()
                 .flex()
                 .flex_row()
                 .justify_between()
-                .child(div().text_lg().text_color(rgb(theme.on_surface)).child(res.text.clone()))
+                .child(div().text_lg().font_weight(gpui::FontWeight::BOLD).text_color(rgb(theme.on_surface)).child(res.text.clone()))
         )
-        .child(
+        .children(entries.into_iter().map(|entry| {
+            let headword = entry.headwords.first().map(|h| format!("{} [{}]", h.term, h.reading)).unwrap_or_default();
             div()
-                .mt_2()
-                .text_sm()
-                .text_color(rgb(theme.on_surface_variant))
-                .child(format!("{} definitions", definitions_count))
-        )
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(div().text_sm().font_weight(gpui::FontWeight::BOLD).text_color(rgb(theme.primary)).child(headword))
+                .children(entry.definitions.into_iter().flat_map(|def| {
+                    def.entries.into_iter().map(|gloss| {
+                        div().text_xs().text_color(rgb(theme.on_surface)).child(gloss.plain_text)
+                    })
+                }))
+        }))
 }

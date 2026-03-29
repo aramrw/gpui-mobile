@@ -81,7 +81,7 @@ targets:
         ONLY_ACTIVE_ARCH: YES
       configs:
         Debug:
-          EXAMPLE_STATIC_LIB: "$(PROJECT_DIR)/../target/aarch64-apple-ios/debug/libgpui_mobile_example.a"
+          EXAMPLE_STATIC_LIB: "$(PROJECT_DIR)/../target/aarch64-apple-ios/release/libgpui_mobile_example.a"
           GCC_OPTIMIZATION_LEVEL: "0"
           DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
           SWIFT_OPTIMIZATION_LEVEL: "-Onone"
@@ -112,14 +112,10 @@ targets:
             RUST_TARGET="aarch64-apple-ios"
           fi
 
-          # Determine build profile
-          if [ "${CONFIGURATION}" = "Release" ]; then
-            CARGO_FLAGS="--release"
-          else
-            CARGO_FLAGS=""
-          fi
+          # FORCED: Always use release for performance during dictionary imports
+          CARGO_FLAGS="--release"
 
-          echo "Building gpui-mobile for ${RUST_TARGET} (${CONFIGURATION})..."
+          echo "Building gpui-mobile for ${RUST_TARGET} (FORCED RELEASE)..."
 
           # Ensure the Rust target is installed
           rustup target add "${RUST_TARGET}" 2>/dev/null || true

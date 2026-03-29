@@ -97,7 +97,10 @@ impl DictionariesState {
                                         log::info!("Dictionary import completed successfully");
                                         weak_state.update(&mut cx, |_, cx: &mut Context<'_, DictionariesState>| {
                                             let _ = cx.read_global(|g: &GlobalYomichan, _| {
-                                                g.write().update_options()
+                                                let res = g.write().update_options();
+                                                if let Err(e) = res {
+                                                    log::error!("Failed to save settings: {}", e);
+                                                }
                                             });
                                             cx.notify();
                                         }).ok();

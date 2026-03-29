@@ -242,12 +242,15 @@ fn open_main_window(cx: &mut App) {
     log::info!("HTTP client configured successfully");
 
     // Initialize Yomichan
-    let data_dir = gpui_mobile::packages::path_provider::cache_directory()
-        .map_err(|e| anyhow::anyhow!("Failed to get cache directory: {}", e))
+    let data_dir = gpui_mobile::packages::path_provider::support_directory()
+        .or_else(|_| gpui_mobile::packages::path_provider::documents_directory())
+        .map_err(|e| anyhow::anyhow!("Failed to get persistent data directory: {}", e))
         .unwrap();
     if !data_dir.exists() {
         std::fs::create_dir_all(&data_dir).expect("could not create data dir");
     }
+    log::info!("Yomichan data directory: {:?}", data_dir);
+    
     let yomichan_instance = Yomichan::new(data_dir).expect("Failed to initialize Yomichan");
     let yomichan_lock = Arc::new(parking_lot::RwLock::new(yomichan_instance.into()));
     
