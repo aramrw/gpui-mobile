@@ -71,6 +71,20 @@ use gpui::Application;
 #[cfg(any(target_os = "ios", target_os = "android"))]
 use screens::Router;
 
+use std::sync::Arc;
+use yomichan_rs::Yomichan;
+
+// --- New Global Definition ---
+#[derive(Clone)]
+pub struct GlobalYomichan(pub Arc<parking_lot::RwLock<Yomichan<'static>>>);
+impl gpui::Global for GlobalYomichan {}
+impl std::ops::Deref for GlobalYomichan {
+    type Target = Arc<parking_lot::RwLock<Yomichan<'static>>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Android entry point
 // ═══════════════════════════════════════════════════════════════════════════
@@ -227,6 +241,17 @@ fn open_main_window(cx: &mut App) {
     cx.set_http_client(std::sync::Arc::new(http_client));
     log::info!("HTTP client configured successfully");
 
+    // Initialize Yomichan
+    let data_dir = gpui_mobile::packages::path_provider::support_directory()
+        .map_err(|e| anyhow::anyhow!("Failed to get support directory: {}", e))
+        .unwrap();
+    if !data_dir.exists() {
+        std::fs::create_dir_all(&data_dir).expect("could not create data dir");
+    }
+    let yomichan_instance = Yomichan::new(data_dir).expect("Failed to initialize Yomichan");
+    cx.set_global(GlobalYomichan(Arc::new(yomichan_instance.into())));
+    log::info!("Successfully initialized GlobalYomichan");
+
     // Check if the app was launched via a deeplink and determine the initial screen.
     let initial_screen = match gpui_mobile::packages::deeplink::get_initial_link() {
         Ok(Some(url)) => {
@@ -249,7 +274,7 @@ fn open_main_window(cx: &mut App) {
             window_bounds: None,
             ..Default::default()
         },
-        |_, cx| cx.new(|_| Router::with_initial_screen(initial_screen)),
+        |window, cx| cx.new(|cx| Router::with_initial_screen(initial_screen, window, cx)),
     ) {
         Ok(_handle) => {
             #[cfg(target_os = "android")]
