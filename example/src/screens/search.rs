@@ -1,6 +1,6 @@
 use gpui::{
-    AsyncApp, Context, Entity, IntoElement, ParentElement, Styled, Task,
-    WeakEntity, div,
+    prelude::*, AsyncApp, Context, Entity, IntoElement, ParentElement, Styled, Task,
+    WeakEntity, div, rgb,
 };
 use gpui_mobile::components::material::search_bar::SearchBar;
 use gpui_mobile::components::material::MaterialTheme;
@@ -127,11 +127,53 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
         )
         .child(
             div()
+                .id("search-results-scroll")
                 .flex_1()
+                .overflow_y_scroll()
                 .child(if let Some(results) = results {
-                    div().child(format!("Found {} results", results.len()))
+                    if results.is_empty() {
+                        div().px_4().child("No results found.")
+                    } else {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .px_4()
+                            .children(results.into_iter().enumerate().map(|(_, res)| {
+                                render_search_result(res, theme)
+                            }))
+                    }
                 } else {
-                    div().child("No results yet")
+                    div().px_4().child("Type to search...")
                 })
         )
 }
+
+fn render_search_result(res: TermSearchResultsSegment, theme: MaterialTheme) -> impl IntoElement {
+    div()
+        .flex()
+        .flex_col()
+        .bg(rgb(theme.surface_container_high))
+        .p_4()
+        .rounded_xl()
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .justify_between()
+                .child(div().text_lg().text_color(rgb(theme.on_surface)).child(res.text.clone()))
+        )
+        .child(
+            div()
+                .mt_2()
+                .text_sm()
+                .text_color(rgb(theme.on_surface_variant))
+                .child(format!(
+                    "{} definitions",
+                    res.results
+                        .as_ref()
+                        .map_or(0, |r| r.dictionary_entries.len())
+                )),
+        )
+}
+
