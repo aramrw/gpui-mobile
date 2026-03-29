@@ -1,6 +1,6 @@
 use gpui::{
-    prelude::*, AsyncApp, Context, Entity, IntoElement, ParentElement, Styled, Task,
-    WeakEntity, div, rgb,
+    AsyncApp, Context, Entity, IntoElement, ParentElement, Render, SharedString, Styled, Task,
+    WeakEntity, div, px, rgb, AppContext, InteractiveElement, StatefulInteractiveElement,
 };
 use gpui_mobile::components::material::search_bar::SearchBar;
 use gpui_mobile::components::material::MaterialTheme;
@@ -62,7 +62,7 @@ impl SearchState {
                         .spawn(async move { ycd.write().search(&term) })
                         .await;
 
-                    let _ = this_handle
+                    this_handle
                         .update(&mut cx_clone, |this, cx| {
                             this.search_results = results;
                             if this.selected_term_index.is_none() && this.search_results.is_some() {
@@ -88,6 +88,7 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
     let search_state_handle_for_trailing = search_state.clone();
     
     div()
+        .id("search-page")
         .flex()
         .flex_col()
         .size_full()
@@ -105,7 +106,7 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
                     set_text_input_callback(Some(Box::new(move |text| {
                         let search_state_handle = search_state_handle.clone();
                         let text = text.to_string();
-                        let async_cx = async_cx.clone();
+                        let mut async_cx = async_cx.clone();
                         
                         let _ = async_cx.update(|cx| {
                             search_state_handle.update(cx, |state, cx| {
@@ -127,7 +128,7 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
         )
         .child(
             div()
-                .id("search-results-scroll")
+                .id("search-results")
                 .flex_1()
                 .overflow_y_scroll()
                 .child(if let Some(results) = results {
@@ -150,6 +151,7 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
 }
 
 fn render_search_result(res: TermSearchResultsSegment, theme: MaterialTheme) -> impl IntoElement {
+    let definitions_count = res.results.as_ref().map(|r| r.dictionary_entries.len()).unwrap_or(0);
     div()
         .flex()
         .flex_col()
@@ -168,12 +170,6 @@ fn render_search_result(res: TermSearchResultsSegment, theme: MaterialTheme) -> 
                 .mt_2()
                 .text_sm()
                 .text_color(rgb(theme.on_surface_variant))
-                .child(format!(
-                    "{} definitions",
-                    res.results
-                        .as_ref()
-                        .map_or(0, |r| r.dictionary_entries.len())
-                )),
+                .child(format!("{} definitions", definitions_count))
         )
 }
-

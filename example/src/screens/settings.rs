@@ -1,6 +1,6 @@
 use gpui::{
-    Context, Entity, IntoElement, ParentElement, Styled,
-    div, rgb, AppContext, InteractiveElement,
+    AsyncApp, Context, Entity, IntoElement, ParentElement, Render, SharedString, Styled,
+    WeakEntity, div, px, rgb, AppContext, InteractiveElement, StatefulInteractiveElement,
 };
 use gpui_mobile::components::material::MaterialTheme;
 use crate::GlobalYomichan;
@@ -12,6 +12,20 @@ impl SettingsState {
     pub fn new(_window: &mut gpui::Window, _cx: &mut Context<Self>) -> Self {
         Self {}
     }
+
+    pub fn switch_profile(name: String, cx: &mut Context<Router>) {
+        let global_yomichan = cx.read_global(|g: &GlobalYomichan, _cx| g.clone());
+        {
+            let ycd = global_yomichan.read();
+            let opts = ycd.options();
+            let mut opts_guard = opts.write();
+            if let Some(idx) = opts_guard.profiles.get_index_of(&name) {
+                opts_guard.current_profile = idx;
+            }
+            let _ = ycd.update_options();
+        }
+        cx.notify();
+    }
 }
 
 pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
@@ -21,13 +35,23 @@ pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<
     let sub_text = theme.on_surface_variant;
     let card_bg = theme.surface_container_high;
 
+    let global_yomichan = cx.read_global(|g: &GlobalYomichan, _cx| g.clone());
+    let (profiles, current_profile_idx) = {
+        let ycd = global_yomichan.read();
+        let opts_ptr = ycd.options();
+        let opts = opts_ptr.read();
+        (opts.profiles.keys().cloned().collect::<Vec<String>>(), opts.current_profile)
+    };
+
     div()
+        .id("settings-page")
         .flex()
         .flex_col()
         .size_full()
         .gap_4()
         .px_4()
         .py_6()
+        .overflow_y_scroll()
         // ── Section: Appearance ───────────────────────────────────────────
         .child(section_header("Appearance", sub_text))
         .child(
@@ -45,22 +69,23 @@ pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<
                     }),
                 ))
         )
-        // ── Section: Profile ─────────────────────────────────────────────
-        .child(section_header("Profile", sub_text))
+        // ── Section: Profiles ─────────────────────────────────────────────
+        .child(section_header("Profiles", sub_text))
         .child(
             settings_card(card_bg)
-                .child(action_row(
-                    "Current Profile",
-                    &format!("Currently: {}", cx.read_global(|g: &GlobalYomichan, _| {
-                        let opts = g.read().options();
-                        let opts_guard = opts.read();
-                        opts_guard.profiles.get_index(opts_guard.current_profile).map(|(k, _)| k.clone()).unwrap_or_else(|| "Default".to_string())
-                    })),
-                    theme,
-                    cx.listener(|_, _, _, _| {
-                        // TODO: Implement profile switching
-                    }),
-                ))
+                .children(profiles.into_iter().enumerate().map(|(i, name)| {
+                    let active = i == current_profile_idx;
+                    let name_clone = name.clone();
+                    action_row(
+                        &name,
+                        if active { "Active" } else { "Switch to this profile" },
+                        active,
+                        theme,
+                        cx.listener(move |_, _, _, cx| {
+                            SettingsState::switch_profile(name_clone.clone(), cx);
+                        }),
+                    )
+                }))
         )
         .child(
             div()
@@ -100,7 +125,7 @@ fn toggle_row(
 ) -> impl IntoElement {
     let toggle_bg = if is_on { theme.primary } else { theme.on_surface_variant };
     let toggle_label = if is_on { "ON" } else { "OFF" };
-    let toggle_text = if is_on { theme.on_primary } else { theme.on_surface_variant };
+    let toggle_text = if is_on { theme.on_primary } else { theme.on_surface };
 
     div()
         .flex()
@@ -144,6 +169,7 @@ fn toggle_row(
 fn action_row(
     title: &str,
     description: &str,
+    active: bool,
     theme: MaterialTheme,
     handler: impl Fn(&gpui::MouseDownEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> impl IntoElement {
@@ -163,7 +189,7 @@ fn action_row(
                 .child(
                     div()
                         .text_base()
-                        .text_color(rgb(theme.on_surface))
+                        .text_color(rgb(if active { theme.primary } else { theme.on_surface }))
                         .child(title.to_string()),
                 )
                 .child(
@@ -173,6 +199,10 @@ fn action_row(
                         .child(description.to_string()),
                 ),
         )
-        .child(div().text_sm().text_color(rgb(theme.primary)).child("→"))
+        .child(if active {
+            div().text_sm().text_color(rgb(theme.primary)).child("✓")
+        } else {
+            div().text_sm().text_color(rgb(theme.on_surface_variant)).child("→")
+        })
         .on_mouse_down(gpui::MouseButton::Left, handler)
 }

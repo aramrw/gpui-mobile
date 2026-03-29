@@ -15,7 +15,7 @@ name = "gpui-example"
 path = "src/main.rs"
 
 [dependencies]
-gpui-mobile = { path = ".." }
+gpui-mobile = { path = "..", features = ["file_selector"] }
 gpui = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c", package = "gpui", default-features = false }
 reqwest_client = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c", package = "reqwest_client" }
 reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662463bda39148ba154100dd44d3fba5873a4", package = "zed-reqwest", default-features = false, features = ["rustls-tls"] }

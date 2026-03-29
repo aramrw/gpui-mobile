@@ -249,6 +249,21 @@ fn open_main_window(cx: &mut App) {
         std::fs::create_dir_all(&data_dir).expect("could not create data dir");
     }
     let yomichan_instance = Yomichan::new(data_dir).expect("Failed to initialize Yomichan");
+    
+    // Ensure default language is set to avoid panics
+    {
+        let mut ycd = yomichan_instance.write();
+        let current_lang = {
+            let opts = ycd.options().read();
+            let prof = opts.get_current_profile().unwrap().read();
+            prof.options().general().language.clone()
+        };
+        if current_lang.is_empty() {
+            ycd.set_language("ja").expect("failed to set default language");
+            let _ = ycd.update_options();
+        }
+    }
+
     cx.set_global(GlobalYomichan(Arc::new(yomichan_instance.into())));
     log::info!("Successfully initialized GlobalYomichan");
 
