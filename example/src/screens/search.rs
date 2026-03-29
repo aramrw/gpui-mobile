@@ -80,9 +80,11 @@ impl SearchState {
 pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
-    let state = search_state.read(cx);
-    let query = state.query.clone();
-    let results = state.search_results.clone();
+    
+    let (query, results, selected_index) = {
+        let state = search_state.read(cx);
+        (state.query.clone(), state.search_results.clone(), state.selected_term_index)
+    };
 
     let search_state_handle = search_state.clone();
     let search_state_handle_for_trailing = search_state.clone();
@@ -92,9 +94,9 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
         .flex()
         .flex_col()
         .size_full()
-        .gap_4()
-        .px_4()
-        .py_4()
+        .gap_2()
+        .px_2()
+        .py_2()
         .child(
             SearchBar::new(theme)
                 .query(query.clone())
@@ -126,7 +128,7 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
                         
                         let async_cx = async_cx.clone();
                         async_cx.update(move |cx| {
-                            search_state_handle.update(cx, |state, cx| {
+                            let _ = search_state_handle.update(cx, |state, cx| {
                                 state.query.push_str(&text);
                                 let q = state.query.clone();
                                 state.queue_search(&q, cx, true);
@@ -139,10 +141,12 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
                     search_state_handle_for_trailing.update(cx, |state, cx| {
                         state.query.clear();
                         state.search_results = None;
+                        state.selected_term_index = None;
                         cx.notify();
                     });
                 }))
         )
+        .child(render_segment_selector(search_state, theme, cx))
         .child(
             div()
                 .id("search-results")
@@ -154,15 +158,23 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
                 .child(if let Some(results) = results {
                     if results.is_empty() {
                         div().px_4().child("No results found.")
+                    } else if let Some(selected_index) = selected_index {
+                        if let Some(segment) = results.get(selected_index) {
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_2()
+                                .px_2()
+                                .children(segment.results.as_ref().map(|r| {
+                                    r.dictionary_entries.iter().map(|entry| {
+                                        render_dictionary_entry(entry, theme)
+                                    }).collect::<Vec<_>>()
+                                }).unwrap_or_default())
+                        } else {
+                            div().px_4().child("Select a word above")
+                        }
                     } else {
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_2()
-                            .px_4()
-                            .children(results.into_iter().enumerate().map(|(_, res)| {
-                                render_search_result(res, theme)
-                            }))
+                        div().px_4().child("Select a word above")
                     }
                 } else {
                     div().px_4().child("Type to search...")
@@ -170,7 +182,66 @@ pub fn render(search_state: &Entity<SearchState>, router: &Router, cx: &mut Cont
         )
 }
 
+fn render_segment_selector(search_state: &Entity<SearchState>, theme: MaterialTheme, cx: &mut Context<Router>) -> impl IntoElement {
+    let (results, selected_index) = {
+        let state = search_state.read(cx);
+        (state.search_results.clone(), state.selected_term_index)
+    };
+    let search_state_handle = search_state.clone();
+
+    if let Some(results) = results {
+        div()
+            .flex()
+            .flex_row()
+            .flex_wrap()
+            .gap_2()
+            .px_2()
+            .py_1()
+            .children(results.into_iter().enumerate().map(|(i, segment)| {
+                let is_selected = Some(i) == selected_index;
+                let search_state_handle = search_state_handle.clone();
+                let text = segment.text.clone();
+                
+                div()
+                    .px_3()
+                    .py_1()
+                    .rounded_lg()
+                    .bg(rgb(if is_selected { theme.primary_container } else { theme.surface_container_high }))
+                    .text_color(rgb(if is_selected { theme.on_primary_container } else { theme.on_surface }))
+                    .text_sm()
+                    .child(text)
+                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
+                        let _ = search_state_handle.update(cx, |state, cx| {
+                            state.selected_term_index = Some(i);
+                            cx.notify();
+                        });
+                    }))
+            }))
+    } else {
+        div()
+    }
+}
+
+fn render_dictionary_entry(entry: &yomichan_rs::TermDictionaryEntry, theme: MaterialTheme) -> impl IntoElement {
+    let headword = entry.headwords.first().map(|h| format!("{} [{}]", h.term, h.reading)).unwrap_or_default();
+    div()
+        .flex()
+        .flex_col()
+        .bg(rgb(theme.surface_container_high))
+        .p_3()
+        .rounded_xl()
+        .gap_1()
+        .child(div().text_sm().font_weight(gpui::FontWeight::BOLD).text_color(rgb(theme.primary)).child(headword))
+        .children(entry.definitions.iter().flat_map(|def| {
+            def.entries.iter().map(|gloss| {
+                div().text_xs().text_color(rgb(theme.on_surface)).child(gloss.plain_text.clone())
+            }).collect::<Vec<_>>()
+        }))
+}
+
 fn render_search_result(res: TermSearchResultsSegment, theme: MaterialTheme) -> impl IntoElement {
+    // This function is now deprecated in favor of segmented rendering above, 
+    // but kept for reference or single-result cases if needed.
     let entries = res.results.as_ref().map(|r| r.dictionary_entries.clone()).unwrap_or_default();
     
     div()

@@ -68,6 +68,21 @@ pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<
                         cx.notify();
                     }),
                 ))
+                .child(div().h_px().bg(rgb(theme.surface_container_low)))
+                .child(action_row(
+                    "Font Size",
+                    &format!("{:.1}x multiplier", router.font_size_multiplier),
+                    false,
+                    theme,
+                    cx.listener(|this, _, _, cx| {
+                        if this.font_size_multiplier >= 1.5 {
+                            this.font_size_multiplier = 1.0;
+                        } else {
+                            this.font_size_multiplier += 0.1;
+                        }
+                        cx.notify();
+                    }),
+                ))
         )
         // ── Section: Profiles ─────────────────────────────────────────────
         .child(section_header("Profiles", sub_text))

@@ -191,6 +191,8 @@ pub struct Router {
     pub user_name: SharedString,
     /// A flag toggled in Settings.
     pub dark_mode: bool,
+    /// Global font size multiplier.
+    pub font_size_multiplier: f32,
     /// Navigation history stack for back navigation.
     history: Vec<Screen>,
     /// Safe area insets (logical pixels) to pad around system chrome.
@@ -242,6 +244,7 @@ impl Router {
             tap_count: 0,
             user_name: user_name.into(),
             dark_mode: true,
+            font_size_multiplier: 1.1,
             history,
             safe_area,
             search_state,
@@ -379,6 +382,10 @@ impl Router {
 impl Render for Router {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         log::info!("Router: render() screen={:?}", self.current_screen);
+        
+        // Apply global font size multiplier
+        window.set_rem_size(px(16.0 * self.font_size_multiplier));
+
         let show_tab_bar = self.current_screen.is_tab_root();
         let theme = gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
         let bg_color = theme.surface;
