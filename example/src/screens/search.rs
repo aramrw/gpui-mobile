@@ -1,6 +1,6 @@
 use gpui::{
-    AsyncApp, Context, Entity, IntoElement, ParentElement, Render, SharedString, Styled, Task,
-    WeakEntity, div, px, rgb, AppContext, InteractiveElement, StatefulInteractiveElement,
+    AsyncApp, AsyncWindowContext, Context, Entity, IntoElement, ParentElement, SharedString, Styled, Task,
+    WeakEntity, div, rgb, AppContext, InteractiveElement, StatefulInteractiveElement,
 };
 use gpui_mobile::components::material::search_bar::SearchBar;
 use gpui_mobile::components::material::MaterialTheme;
@@ -48,22 +48,22 @@ impl SearchState {
 
         let new_search_task = cx.spawn(
             move |this_handle: WeakEntity<SearchState>, cx: &mut AsyncApp| {
-                let mut cx_clone = cx.clone();
+                let mut cx = cx.clone();
                 async move {
                     if !immediate {
                         let _ = portable_async_sleep::async_sleep(std::time::Duration::from_millis(200)).await;
                     }
 
-                    let ycd = cx_clone
+                    let ycd = cx
                         .read_global(|g: &GlobalYomichan, _cx| g.0.clone());
 
-                    let results = cx_clone
+                    let results = cx
                         .background_executor()
                         .spawn(async move { ycd.write().search(&term) })
                         .await;
 
                     this_handle
-                        .update(&mut cx_clone, |this, cx| {
+                        .update(&mut cx, |this, cx| {
                             this.search_results = results;
                             if this.selected_term_index.is_none() && this.search_results.is_some() {
                                 this.selected_term_index = Some(0);

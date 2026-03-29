@@ -1,6 +1,6 @@
 use gpui::{
-    AsyncApp, Context, Entity, IntoElement, ParentElement, SharedString, Styled,
-    div, px, rgb, AppContext, InteractiveElement, StatefulInteractiveElement,
+    AsyncApp, Context, Entity, IntoElement, ParentElement, Styled,
+    div, rgb, InteractiveElement, StatefulInteractiveElement, AppContext,
 };
 use gpui_mobile::components::material::MaterialTheme;
 use gpui_mobile::packages::file_selector::{open_file, OpenFileOptions, TypeGroup};
@@ -21,7 +21,7 @@ impl DictionariesState {
         new_state: bool,
         cx: &mut Context<Router>,
     ) {
-        let global_yomichan = cx.read_global(|g: &GlobalYomichan, _cx| g.clone());
+        let global_yomichan = cx.global::<GlobalYomichan>().clone();
         
         // Update in memory
         {
@@ -52,7 +52,7 @@ impl DictionariesState {
     }
 
     pub fn set_language(lang: String, cx: &mut Context<Router>) {
-        let global_yomichan = cx.read_global(|g: &GlobalYomichan, _cx| g.clone());
+        let global_yomichan = cx.global::<GlobalYomichan>().clone();
         {
             let ycd = global_yomichan.write();
             let _ = ycd.set_language(&lang);
@@ -71,25 +71,29 @@ impl DictionariesState {
             ..Default::default()
         };
 
-        match open_file(&options) {
-            Ok(Some(file)) => {
-                let path = PathBuf::from(file.path);
-                let global_yomichan = cx.read_global(|g: &GlobalYomichan, _cx| g.clone());
-                
-                cx.spawn(|_, cx: &mut AsyncApp| {
-                    let cx = cx.clone();
-                    async move {
+        let global_yomichan = cx.global::<GlobalYomichan>().clone();
+        
+        cx.spawn(|_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                match open_file(options).await {
+                    Ok(Some(file)) => {
+                        let path = PathBuf::from(file.path);
                         // import_dictionaries takes a slice of paths
                         let _ = global_yomichan.read().import_dictionaries(&[path]);
-                        let _ = cx.read_global(|g: &GlobalYomichan, _| {
-                            g.write().update_options()
+                        let _ = cx.update(|cx: &mut gpui::App| {
+                            let _ = cx.read_global(|g: &GlobalYomichan, _| {
+                                g.write().update_options()
+                            });
                         });
                     }
-                }).detach();
+                    Err(e) => {
+                        log::error!("File picker error: {}", e);
+                    }
+                    _ => {}
+                }
             }
-            _ => {}
-        }
-        cx.notify();
+        }).detach();
     }
 }
 
@@ -97,7 +101,7 @@ pub fn render(_state: &Entity<DictionariesState>, router: &Router, cx: &mut Cont
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
     
-    let global_yomichan = cx.read_global(|g: &GlobalYomichan, _cx| g.clone());
+    let global_yomichan = cx.global::<GlobalYomichan>().clone();
     let (dictionaries, current_lang) = {
         let ycd = global_yomichan.read();
         let options_ptr = ycd.options();
@@ -163,7 +167,7 @@ pub fn render(_state: &Entity<DictionariesState>, router: &Router, cx: &mut Cont
                 .flex()
                 .flex_col()
                 .gap_2()
-                .children(dictionaries.into_iter().map(|(_, opt)| {
+                .children(dictionaries.into_iter().map(|(_, opt): (String, DictionaryOptions)| {
                     render_dictionary_card(opt, theme, cx)
                 }))
         )

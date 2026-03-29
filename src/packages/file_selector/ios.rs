@@ -203,7 +203,7 @@ fn url_to_selected_file(url_string: &str) -> SelectedFile {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-pub fn open_file(options: &OpenFileOptions) -> Result<Option<SelectedFile>, String> {
+pub async fn open_file(options: OpenFileOptions) -> Result<Option<SelectedFile>, String> {
     let rx = set_result_channel();
     unsafe {
         let content_types = if options.accept_type_groups.is_empty() {
@@ -213,9 +213,8 @@ pub fn open_file(options: &OpenFileOptions) -> Result<Option<SelectedFile>, Stri
             // Merge all type groups into one array
             let mut all_types: Vec<*mut Object> = Vec::new();
             for group in &options.accept_type_groups {
-                let count: usize;
                 let arr = type_group_to_uttypes(group);
-                count = msg_send![arr, count];
+                let count: usize = msg_send![arr, count];
                 for i in 0..count {
                     let obj: *mut Object = msg_send![arr, objectAtIndex: i];
                     all_types.push(obj);
@@ -243,15 +242,22 @@ pub fn open_file(options: &OpenFileOptions) -> Result<Option<SelectedFile>, Stri
         present_picker(picker)?;
     }
 
-    // Wait for result (blocks until user picks or cancels)
-    match rx.recv() {
-        Ok(paths) if paths.is_empty() => Ok(None),
-        Ok(paths) => Ok(Some(url_to_selected_file(&paths[0]))),
-        Err(_) => Ok(None),
-    }
+    // Wait for result in a non-blocking way for the GPUI executor
+    // We use a separate thread to wait for the channel since recv() blocks
+    let (tx, rx_async) = futures::channel::oneshot::channel();
+    std::thread::spawn(move || {
+        let result = match rx.recv() {
+            Ok(paths) if paths.is_empty() => Ok(None),
+            Ok(paths) => Ok(Some(url_to_selected_file(&paths[0]))),
+            Err(_) => Ok(None),
+        };
+        let _ = tx.send(result);
+    });
+
+    rx_async.await.map_err(|_| "Channel closed".to_string())?
 }
 
-pub fn open_files(options: &OpenFileOptions) -> Result<Vec<SelectedFile>, String> {
+pub async fn open_files(options: OpenFileOptions) -> Result<Vec<SelectedFile>, String> {
     let rx = set_result_channel();
     unsafe {
         let content_types = if options.accept_type_groups.is_empty() {
@@ -286,10 +292,16 @@ pub fn open_files(options: &OpenFileOptions) -> Result<Vec<SelectedFile>, String
         present_picker(picker)?;
     }
 
-    match rx.recv() {
-        Ok(paths) => Ok(paths.iter().map(|p| url_to_selected_file(p)).collect()),
-        Err(_) => Ok(vec![]),
-    }
+    let (tx, rx_async) = futures::channel::oneshot::channel();
+    std::thread::spawn(move || {
+        let result = match rx.recv() {
+            Ok(paths) => Ok(paths.iter().map(|p| url_to_selected_file(p)).collect()),
+            Err(_) => Ok(vec![]),
+        };
+        let _ = tx.send(result);
+    });
+
+    rx_async.await.map_err(|_| "Channel closed".to_string())?
 }
 
 pub fn get_save_path(options: &SaveFileOptions) -> Result<Option<String>, String> {

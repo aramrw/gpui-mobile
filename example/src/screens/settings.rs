@@ -1,6 +1,6 @@
 use gpui::{
-    AsyncApp, Context, Entity, IntoElement, ParentElement, Render, SharedString, Styled,
-    WeakEntity, div, px, rgb, AppContext, InteractiveElement, StatefulInteractiveElement,
+    Context, Entity, IntoElement, ParentElement, Styled,
+    div, rgb, InteractiveElement, StatefulInteractiveElement, AppContext,
 };
 use gpui_mobile::components::material::MaterialTheme;
 use crate::GlobalYomichan;
@@ -14,7 +14,7 @@ impl SettingsState {
     }
 
     pub fn switch_profile(name: String, cx: &mut Context<Router>) {
-        let global_yomichan = cx.read_global(|g: &GlobalYomichan, _cx| g.clone());
+        let global_yomichan = cx.global::<GlobalYomichan>().clone();
         {
             let ycd = global_yomichan.read();
             let opts = ycd.options();
@@ -35,7 +35,7 @@ pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<
     let sub_text = theme.on_surface_variant;
     let card_bg = theme.surface_container_high;
 
-    let global_yomichan = cx.read_global(|g: &GlobalYomichan, _cx| g.clone());
+    let global_yomichan = cx.global::<GlobalYomichan>().clone();
     let (profiles, current_profile_idx) = {
         let ycd = global_yomichan.read();
         let opts_ptr = ycd.options();
@@ -73,7 +73,7 @@ pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<
         .child(section_header("Profiles", sub_text))
         .child(
             settings_card(card_bg)
-                .children(profiles.into_iter().enumerate().map(|(i, name)| {
+                .children(profiles.into_iter().enumerate().map(|(i, name): (usize, String)| {
                     let active = i == current_profile_idx;
                     let name_clone = name.clone();
                     action_row(
