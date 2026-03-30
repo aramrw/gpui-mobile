@@ -7,7 +7,6 @@ use gpui_mobile::components::material::MaterialTheme;
 use gpui_mobile::{set_text_input_callback, show_keyboard};
 use regex::Regex;
 use std::sync::LazyLock;
-use unidecode::unidecode;
 use yomichan_rs::TermSearchResultsSegment;
 
 use super::Router;
@@ -36,8 +35,7 @@ impl SearchState {
         self.search_task.take();
 
         let trimmed_term = term.trim();
-        let ascii_term = unidecode(trimmed_term);
-        let clean_term = CLEANUP_REGEX.replace_all(&ascii_term, "");
+        let clean_term = CLEANUP_REGEX.replace_all(trimmed_term, "");
         let term = clean_term.to_string();
 
         if term.is_empty() {
@@ -191,7 +189,7 @@ pub fn render(
                         div().px_4().child("Select a word above")
                     }
                 } else {
-                    div().px_4().child("Type to search...")
+                    div()/* .px_4().child("Type to search...") */
                 }),
         )
 }

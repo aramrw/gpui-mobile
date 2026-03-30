@@ -25,7 +25,7 @@ use objc::{
     class,
     declare::ClassDecl,
     msg_send,
-    runtime::{Class, Object, Sel, BOOL, YES},
+    runtime::{Class, Object, Sel, BOOL, NO, YES},
     sel, sel_impl,
 };
 use parking_lot::Mutex;
@@ -227,47 +227,32 @@ fn register_metal_view_class() -> &'static Class {
 /// for the software keyboard to actually route typed characters back to the
 /// app.  Without this, `becomeFirstResponder` silently fails and no keyboard
 /// appears.
+/// The hidden text input view for keyboard input.
 ///
-/// The three required methods:
-/// - `hasText` → always returns YES (simplifies things; no harm)
-/// - `insertText:` → forwards the text to `IosWindow::handle_text_input`
-/// - `deleteBackward` → dispatches a backspace via `crate::dispatch_text_input`
+/// We subclass `UITextField` but keep it mostly transparent. Subclassing
+/// `UITextField` gives us the full `UITextInput` protocol (including
+/// Japanese/CJK IME, marked text, and candidate selection) for free.
+///
+/// The required overrides:
+/// - `insertText:` → forwards to `IosWindow::handle_text_input`
+/// - `deleteBackward` → forwards to `IosWindow::handle_delete_backward`
+/// - `replaceRange:withText:` → catch candidate selection from IME
 fn register_text_input_view_class() -> &'static Class {
     TEXT_INPUT_VIEW_CLASS_REGISTERED.call_once(|| {
-        let superclass = class!(UIView);
+        let superclass = class!(UITextField);
         let mut decl = ClassDecl::new("GPUITextInputView", superclass).unwrap();
-
-        // Declare protocol conformance so iOS knows this view can receive
-        // keyboard text input.
-        if let Some(protocol) = objc::runtime::Protocol::get("UIKeyInput") {
-            decl.add_protocol(protocol);
-        }
 
         // Store the IosWindow pointer so callbacks can reach the Rust window.
         decl.add_ivar::<*mut std::ffi::c_void>(GPUI_WINDOW_IVAR);
 
-        // UITextInputTraits property storage — UIView doesn't provide these,
-        // but iOS reads them from the first responder to configure the keyboard.
-        decl.add_ivar::<isize>("_keyboardType"); // UIKeyboardType
-        decl.add_ivar::<isize>("_autocorrectionType"); // UITextAutocorrectionType
-        decl.add_ivar::<isize>("_autocapitalizationType"); // UITextAutocapitalizationType
-
-        // --- UIKeyInput protocol methods ---
-
-        // BOOL hasText
-        extern "C" fn has_text(_this: &Object, _sel: Sel) -> BOOL {
-            YES
-        }
+        // --- UIKeyInput/UITextInput protocol methods ---
 
         // void insertText:(NSString *)text
         extern "C" fn insert_text(this: &Object, _sel: Sel, text: *mut Object) {
             unsafe {
-                let window_ptr: *mut std::ffi::c_void = *this.get_ivar(GPUI_WINDOW_IVAR);
-                if window_ptr.is_null() || text.is_null() {
-                    return;
-                }
-                let window = &*(window_ptr as *const IosWindow);
-                window.handle_text_input(text);
+                // Call super. onEditingChanged will handle the Rust-side dispatch.
+                let superclass = class!(UITextField);
+                let _: () = msg_send![super(this, superclass), insertText: text];
             }
         }
 
@@ -275,11 +260,66 @@ fn register_text_input_view_class() -> &'static Class {
         extern "C" fn delete_backward(this: &Object, _sel: Sel) {
             unsafe {
                 let window_ptr: *mut std::ffi::c_void = *this.get_ivar(GPUI_WINDOW_IVAR);
+                if !window_ptr.is_null() {
+                    let window = &*(window_ptr as *const IosWindow);
+                    window.handle_delete_backward();
+                }
+                // Call super
+                let superclass = class!(UITextField);
+                let _: () = msg_send![super(this, superclass), deleteBackward];
+            }
+        }
+
+        // void replaceRange:(UITextRange *)range withText:(NSString *)text
+        extern "C" fn replace_range(
+            this: &Object,
+            _sel: Sel,
+            range: *mut Object,
+            text: *mut Object,
+        ) {
+            unsafe {
+                // Call super. onEditingChanged will handle the Rust-side dispatch.
+                let superclass = class!(UITextField);
+                let _: () = msg_send![super(this, superclass), replaceRange: range withText: text];
+            }
+        }
+
+        // void onEditingChanged
+        extern "C" fn on_editing_changed(this: &Object, _sel: Sel) {
+            unsafe {
+                let window_ptr: *mut std::ffi::c_void = *this.get_ivar(GPUI_WINDOW_IVAR);
                 if window_ptr.is_null() {
                     return;
                 }
                 let window = &*(window_ptr as *const IosWindow);
-                window.handle_delete_backward();
+
+                // Check if we are currently composing (marked text).
+                // If we are, don't forward to GPUI yet or clear the buffer,
+                // otherwise we break the IME's internal state.
+                let marked_range: *mut Object = msg_send![this, markedTextRange];
+                if !marked_range.is_null() {
+                    return;
+                }
+
+                // Get the finalized text from the UITextField
+                let text: *mut Object = msg_send![this, text];
+                if text.is_null() {
+                    return;
+                }
+
+                let utf8: *const i8 = msg_send![text, UTF8String];
+                if !utf8.is_null() {
+                    let text_str = std::ffi::CStr::from_ptr(utf8).to_string_lossy();
+                    if !text_str.is_empty() {
+                        log::info!("GPUI iOS: Text finalized: {:?}", text_str);
+                        window.handle_text_input(text);
+
+                        // Clear the field so it's ready for the next input
+                        let empty_string: *mut Object = msg_send![class!(NSString), alloc];
+                        let empty_string: *mut Object = msg_send![empty_string, init];
+                        let _: () = msg_send![this, setText: empty_string];
+                    }
+                }
             }
         }
 
@@ -288,36 +328,10 @@ fn register_text_input_view_class() -> &'static Class {
             YES
         }
 
-        // --- UITextInputTraits property accessors ---
-        extern "C" fn get_keyboard_type(this: &Object, _sel: Sel) -> isize {
-            unsafe { *this.get_ivar::<isize>("_keyboardType") }
-        }
-        extern "C" fn set_keyboard_type(this: &mut Object, _sel: Sel, val: isize) {
-            unsafe {
-                this.set_ivar::<isize>("_keyboardType", val);
-            }
-        }
-        extern "C" fn get_autocorrection_type(this: &Object, _sel: Sel) -> isize {
-            unsafe { *this.get_ivar::<isize>("_autocorrectionType") }
-        }
-        extern "C" fn set_autocorrection_type(this: &mut Object, _sel: Sel, val: isize) {
-            unsafe {
-                this.set_ivar::<isize>("_autocorrectionType", val);
-            }
-        }
-        extern "C" fn get_autocapitalization_type(this: &Object, _sel: Sel) -> isize {
-            unsafe { *this.get_ivar::<isize>("_autocapitalizationType") }
-        }
-        extern "C" fn set_autocapitalization_type(this: &mut Object, _sel: Sel, val: isize) {
-            unsafe {
-                this.set_ivar::<isize>("_autocapitalizationType", val);
-            }
-        }
-
         unsafe {
             decl.add_method(
-                sel!(hasText),
-                has_text as extern "C" fn(&Object, Sel) -> BOOL,
+                sel!(onEditingChanged),
+                on_editing_changed as extern "C" fn(&Object, Sel),
             );
             decl.add_method(
                 sel!(insertText:),
@@ -328,34 +342,12 @@ fn register_text_input_view_class() -> &'static Class {
                 delete_backward as extern "C" fn(&Object, Sel),
             );
             decl.add_method(
+                sel!(replaceRange:withText:),
+                replace_range as extern "C" fn(&Object, Sel, *mut Object, *mut Object),
+            );
+            decl.add_method(
                 sel!(canBecomeFirstResponder),
                 can_become_first_responder as extern "C" fn(&Object, Sel) -> BOOL,
-            );
-
-            // UITextInputTraits property methods
-            decl.add_method(
-                sel!(keyboardType),
-                get_keyboard_type as extern "C" fn(&Object, Sel) -> isize,
-            );
-            decl.add_method(
-                sel!(setKeyboardType:),
-                set_keyboard_type as extern "C" fn(&mut Object, Sel, isize),
-            );
-            decl.add_method(
-                sel!(autocorrectionType),
-                get_autocorrection_type as extern "C" fn(&Object, Sel) -> isize,
-            );
-            decl.add_method(
-                sel!(setAutocorrectionType:),
-                set_autocorrection_type as extern "C" fn(&mut Object, Sel, isize),
-            );
-            decl.add_method(
-                sel!(autocapitalizationType),
-                get_autocapitalization_type as extern "C" fn(&Object, Sel) -> isize,
-            );
-            decl.add_method(
-                sel!(setAutocapitalizationType:),
-                set_autocapitalization_type as extern "C" fn(&mut Object, Sel, isize),
             );
         }
 
@@ -517,20 +509,27 @@ impl IosWindow {
             let _: () = msg_send![window, makeKeyAndVisible];
 
             // Create a hidden text input view for keyboard handling.
-            // Uses our custom GPUITextInputView which implements UIKeyInput
-            // so iOS actually routes keyboard text to us.
+            // Uses our custom GPUITextInputView which subclasses UITextField
+            // so iOS provides full IME support.
             let text_input_class = register_text_input_view_class();
             let text_input_view: *mut Object = msg_send![text_input_class, alloc];
-            let text_input_frame = core_graphics::geometry::CGRect {
-                origin: core_graphics::geometry::CGPoint { x: 0.0, y: 0.0 },
-                size: core_graphics::geometry::CGSize {
-                    width: 1.0,
-                    height: 1.0,
-                },
-            };
+            let text_input_frame = screen_bounds_cg;
             let text_input_view: *mut Object =
                 msg_send![text_input_view, initWithFrame: text_input_frame];
+
+            // Make it invisible
             let _: () = msg_send![text_input_view, setAlpha: 0.01_f64];
+            let clear_color: *mut Object = msg_send![class!(UIColor), clearColor];
+            let _: () = msg_send![text_input_view, setBackgroundColor: clear_color];
+            let _: () = msg_send![text_input_view, setTextColor: clear_color];
+
+            // Register for "Editing Changed" events (UIControlEventEditingChanged = 1 << 17)
+            let _: () = msg_send![text_input_view,
+                addTarget: text_input_view
+                action: sel!(onEditingChanged)
+                forControlEvents: 1_usize << 17
+            ];
+
             let _: () = msg_send![text_input_view, setUserInteractionEnabled: YES];
             let _: () = msg_send![view, addSubview: text_input_view];
 
@@ -1052,11 +1051,8 @@ impl IosWindow {
                 return;
             }
             let _: () = msg_send![self.text_input_view, setKeyboardType: kb_type];
-            log::info!("GPUI iOS: setAutocorrectionType");
-            let _: () = msg_send![self.text_input_view, setAutocorrectionType: 1_isize];
-            log::info!("GPUI iOS: setAutocapitalizationType");
+            let _: () = msg_send![self.text_input_view, setAutocorrectionType: 2_isize];
             let _: () = msg_send![self.text_input_view, setAutocapitalizationType: 0_isize];
-            log::info!("GPUI iOS: scheduling becomeFirstResponder");
 
             // Defer becomeFirstResponder to the next run-loop iteration.
             let _: () = msg_send![self.text_input_view,
@@ -1100,6 +1096,10 @@ impl IosWindow {
                 .to_string_lossy()
                 .into_owned();
 
+            /// PROBLEM: The "Text Finalized" log that prints in the
+            /// "fn on_editing_changed" fn correctly prints out the real text.
+            /// turning the string into rust also isnt a problem, its the same japanese
+            /// basically that log and this log is identical, which is good up till here
             log::info!("GPUI iOS: Text input: {:?}", text_str);
 
             // Try the global text input callback (for our TextInput components).
@@ -1111,29 +1111,6 @@ impl IosWindow {
             if !dispatched {
                 if let Some(handler) = self.input_handler.borrow_mut().as_mut() {
                     handler.replace_text_in_range(None, &text_str);
-                    return;
-                }
-            }
-
-            // Send key events through GPUI's input callback.
-            // Even if dispatch_text_input captured the text, we still send key
-            // events so GPUI triggers a re-render cycle (which runs
-            // drain_pending_text and updates the UI).
-            for c in text_str.chars() {
-                let keystroke = gpui::Keystroke {
-                    modifiers: Modifiers::default(),
-                    key: c.to_string(),
-                    key_char: Some(c.to_string()),
-                };
-
-                let event = PlatformInput::KeyDown(gpui::KeyDownEvent {
-                    keystroke,
-                    is_held: false,
-                    prefer_character_input: true,
-                });
-
-                if let Some(callback) = self.input_callback.borrow_mut().as_mut() {
-                    callback(event);
                 }
             }
         }
@@ -1169,7 +1146,18 @@ impl IosWindow {
     }
 
     /// Handle a key event from an external keyboard
+    #[deprecated]
+    #[deprecated(
+        since = "0.0.1",
+        note = "Not used because incorrectly hardcodes QWERTY for all virtual keyboards. Use handle_text_input instead."
+    )]
     pub fn handle_key_event(&self, key_code: u32, modifier_flags: u32, is_key_down: bool) {
+        // Since the bug is caused by
+        // gpui_ios_handle_key_event throwing rogue QWERTY characters
+        // this for an actual iPhone (touchscreen), so we can
+        // just kill the hardware key event handler dead in its tracks.
+        return;
+
         use super::text_input::{
             key_code_to_key_down, key_code_to_key_up, key_code_to_string,
             modifier_flags_to_modifiers,
