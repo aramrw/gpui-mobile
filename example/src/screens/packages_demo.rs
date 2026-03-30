@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 
-use gpui::{div, prelude::*, px, rgb};
+use gpui::{div, prelude::*, px, rgb, AsyncApp, Context, WeakEntity};
 
 use super::{Router, BLUE, GREEN, LIGHT_CARD_BG, LIGHT_DIVIDER, LIGHT_SUBTEXT, LIGHT_TEXT, MAUVE, PEACH, SURFACE0, SURFACE1, TEAL, TEXT, YELLOW};
 
@@ -423,42 +423,44 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                         .p_3()
                         .child(
                             action_button("Pick File", BLUE, cx.listener(|_this, _, _, cx| {
-                                cx.spawn(async |this, cx| {
-                                    let result = cx.background_executor().spawn(async {
+                                cx.spawn(|this: WeakEntity<Router>, cx: &mut AsyncApp| {
+                                    let mut cx = cx.clone();
+                                    async move {
                                         let opts = gpui_mobile::packages::file_selector::OpenFileOptions::default();
-                                        gpui_mobile::packages::file_selector::open_file(&opts)
-                                    }).await;
-                                    let _ = this.update(cx, |_this, cx| {
-                                        PACKAGES_STATE.with(|s| {
-                                            let mut state = s.borrow_mut();
-                                            match result {
-                                                Ok(Some(f)) => state.last_picked_file = Some(f.name),
-                                                Ok(None) => state.last_picked_file = Some("Cancelled".into()),
-                                                Err(e) => state.last_picked_file = Some(format!("Error: {e}")),
-                                            }
+                                        let result = gpui_mobile::packages::file_selector::open_file(opts).await;
+                                        let _ = this.update(&mut cx, |_this, cx: &mut Context<'_, Router>| {
+                                            PACKAGES_STATE.with(|s| {
+                                                let mut state = s.borrow_mut();
+                                                match result {
+                                                    Ok(Some(f)) => state.last_picked_file = Some(f.name),
+                                                    Ok(None) => state.last_picked_file = Some("Cancelled".into()),
+                                                    Err(e) => state.last_picked_file = Some(format!("Error: {e}")),
+                                                }
+                                            });
+                                            cx.notify();
                                         });
-                                        cx.notify();
-                                    });
+                                    }
                                 }).detach();
                             })),
                         )
                         .child(
                             action_button("Pick Files", GREEN, cx.listener(|_this, _, _, cx| {
-                                cx.spawn(async |this, cx| {
-                                    let result = cx.background_executor().spawn(async {
+                                cx.spawn(|this: WeakEntity<Router>, cx: &mut AsyncApp| {
+                                    let mut cx = cx.clone();
+                                    async move {
                                         let opts = gpui_mobile::packages::file_selector::OpenFileOptions::default();
-                                        gpui_mobile::packages::file_selector::open_files(&opts)
-                                    }).await;
-                                    let _ = this.update(cx, |_this, cx| {
-                                        PACKAGES_STATE.with(|s| {
-                                            let mut state = s.borrow_mut();
-                                            match result {
-                                                Ok(files) => state.last_picked_file = Some(format!("{} files", files.len())),
-                                                Err(e) => state.last_picked_file = Some(format!("Error: {e}")),
-                                            }
+                                        let result = gpui_mobile::packages::file_selector::open_files(opts).await;
+                                        let _ = this.update(&mut cx, |_this, cx: &mut Context<'_, Router>| {
+                                            PACKAGES_STATE.with(|s| {
+                                                let mut state = s.borrow_mut();
+                                                match result {
+                                                    Ok(files) => state.last_picked_file = Some(format!("{} files", files.len())),
+                                                    Err(e) => state.last_picked_file = Some(format!("Error: {e}")),
+                                                }
+                                            });
+                                            cx.notify();
                                         });
-                                        cx.notify();
-                                    });
+                                    }
                                 }).detach();
                             })),
                         )

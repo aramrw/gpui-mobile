@@ -1,6 +1,6 @@
 use super::{OpenFileOptions, SaveFileOptions, SelectedFile, TypeGroup};
 use objc::declare::ClassDecl;
-use objc::runtime::{Class, Object, Sel, BOOL, YES};
+use objc::runtime::{Class, Object, Sel, BOOL, YES, NO};
 use objc::{class, msg_send, sel, sel_impl};
 use std::sync::{mpsc, Mutex, Once};
 
@@ -61,19 +61,62 @@ extern "C" fn did_pick_documents(
     urls: *mut Object,
 ) {
     unsafe {
+        extern "C" {
+            fn NSTemporaryDirectory() -> *mut Object;
+        }
+
         let count: usize = msg_send![urls, count];
-        let mut paths = Vec::with_capacity(count);
+        let mut paths = Vec::<String>::with_capacity(count);
+        let file_manager: *mut Object = msg_send![class!(NSFileManager), defaultManager];
+
         for i in 0..count {
             let url: *mut Object = msg_send![urls, objectAtIndex: i];
-            let abs_string: *mut Object = msg_send![url, absoluteString];
-            if !abs_string.is_null() {
-                let cstr: *const std::ffi::c_char = msg_send![abs_string, UTF8String];
+            // Start accessing security scoped resource for picked files
+            let access: BOOL = msg_send![url, startAccessingSecurityScopedResource];
+
+            let src_path: *mut Object = msg_send![url, path];
+            let filename: *mut Object = msg_send![url, lastPathComponent];
+            let temp_dir: *mut Object = NSTemporaryDirectory();
+            let dest_path: *mut Object = msg_send![temp_dir, stringByAppendingPathComponent: filename];
+
+            // Remove existing file if any
+            let mut error: *mut Object = std::ptr::null_mut();
+            let _: () = msg_send![file_manager, removeItemAtPath: dest_path error: &mut error];
+
+            // Copy file to app's temporary directory to ensure access
+            let mut copy_error: *mut Object = std::ptr::null_mut();
+            let success: BOOL = msg_send![file_manager, copyItemAtPath: src_path toPath: dest_path error: &mut copy_error];
+
+            if success == NO {
+                if !copy_error.is_null() {
+                    let desc: *mut Object = msg_send![copy_error, localizedDescription];
+                    let c_desc: *const std::ffi::c_char = msg_send![desc, UTF8String];
+                    if !c_desc.is_null() {
+                        let msg = std::ffi::CStr::from_ptr(c_desc).to_string_lossy();
+                        log::error!("Failed to copy picked file to temp dir: {}", msg);
+                    }
+                } else {
+                    log::error!("Failed to copy picked file to temp dir (no error details)");
+                }
+            }
+
+            if access == YES {
+                let _: () = msg_send![url, stopAccessingSecurityScopedResource];
+            }
+
+            let result_path = if success == YES { dest_path } else { src_path };
+
+            if !result_path.is_null() {
+                let cstr: *const std::ffi::c_char = msg_send![result_path, UTF8String];
                 if !cstr.is_null() {
-                    paths.push(
-                        std::ffi::CStr::from_ptr(cstr)
-                            .to_string_lossy()
-                            .into_owned(),
-                    );
+                    let path_str = std::ffi::CStr::from_ptr(cstr)
+                        .to_string_lossy()
+                        .into_owned();
+                    
+                    if success == YES {
+                        log::info!("Successfully copied picked file to temp dir: {}", path_str);
+                    }
+                    paths.push(path_str);
                 }
             }
         }
@@ -203,7 +246,7 @@ fn url_to_selected_file(url_string: &str) -> SelectedFile {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-pub fn open_file(options: &OpenFileOptions) -> Result<Option<SelectedFile>, String> {
+pub async fn open_file(options: OpenFileOptions) -> Result<Option<SelectedFile>, String> {
     let rx = set_result_channel();
     unsafe {
         let content_types = if options.accept_type_groups.is_empty() {
@@ -213,9 +256,8 @@ pub fn open_file(options: &OpenFileOptions) -> Result<Option<SelectedFile>, Stri
             // Merge all type groups into one array
             let mut all_types: Vec<*mut Object> = Vec::new();
             for group in &options.accept_type_groups {
-                let count: usize;
                 let arr = type_group_to_uttypes(group);
-                count = msg_send![arr, count];
+                let count: usize = msg_send![arr, count];
                 for i in 0..count {
                     let obj: *mut Object = msg_send![arr, objectAtIndex: i];
                     all_types.push(obj);
@@ -243,15 +285,22 @@ pub fn open_file(options: &OpenFileOptions) -> Result<Option<SelectedFile>, Stri
         present_picker(picker)?;
     }
 
-    // Wait for result (blocks until user picks or cancels)
-    match rx.recv() {
-        Ok(paths) if paths.is_empty() => Ok(None),
-        Ok(paths) => Ok(Some(url_to_selected_file(&paths[0]))),
-        Err(_) => Ok(None),
-    }
+    // Wait for result in a non-blocking way for the GPUI executor
+    // We use a separate thread to wait for the channel since recv() blocks
+    let (tx, rx_async) = futures::channel::oneshot::channel();
+    std::thread::spawn(move || {
+        let result = match rx.recv() {
+            Ok(paths) if paths.is_empty() => Ok(None),
+            Ok(paths) => Ok(Some(url_to_selected_file(&paths[0]))),
+            Err(_) => Ok(None),
+        };
+        let _ = tx.send(result);
+    });
+
+    rx_async.await.map_err(|_| "Channel closed".to_string())?
 }
 
-pub fn open_files(options: &OpenFileOptions) -> Result<Vec<SelectedFile>, String> {
+pub async fn open_files(options: OpenFileOptions) -> Result<Vec<SelectedFile>, String> {
     let rx = set_result_channel();
     unsafe {
         let content_types = if options.accept_type_groups.is_empty() {
@@ -286,10 +335,16 @@ pub fn open_files(options: &OpenFileOptions) -> Result<Vec<SelectedFile>, String
         present_picker(picker)?;
     }
 
-    match rx.recv() {
-        Ok(paths) => Ok(paths.iter().map(|p| url_to_selected_file(p)).collect()),
-        Err(_) => Ok(vec![]),
-    }
+    let (tx, rx_async) = futures::channel::oneshot::channel();
+    std::thread::spawn(move || {
+        let result = match rx.recv() {
+            Ok(paths) => Ok(paths.iter().map(|p| url_to_selected_file(p)).collect()),
+            Err(_) => Ok(vec![]),
+        };
+        let _ = tx.send(result);
+    });
+
+    rx_async.await.map_err(|_| "Channel closed".to_string())?
 }
 
 pub fn get_save_path(options: &SaveFileOptions) -> Result<Option<String>, String> {

@@ -61,14 +61,14 @@ pub struct SelectedFile {
 /// Open a file picker to select a single file.
 ///
 /// Returns `Ok(None)` if the user cancelled.
-pub fn open_file(options: &OpenFileOptions) -> Result<Option<SelectedFile>, String> {
+pub async fn open_file(options: OpenFileOptions) -> Result<Option<SelectedFile>, String> {
     #[cfg(target_os = "ios")]
     {
-        ios::open_file(options)
+        ios::open_file(options).await
     }
     #[cfg(target_os = "android")]
     {
-        android::open_file(options)
+        android::open_file(&options)
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
@@ -80,14 +80,14 @@ pub fn open_file(options: &OpenFileOptions) -> Result<Option<SelectedFile>, Stri
 /// Open a file picker to select multiple files.
 ///
 /// Returns an empty Vec if the user cancelled.
-pub fn open_files(options: &OpenFileOptions) -> Result<Vec<SelectedFile>, String> {
+pub async fn open_files(options: OpenFileOptions) -> Result<Vec<SelectedFile>, String> {
     #[cfg(target_os = "ios")]
     {
-        ios::open_files(options)
+        ios::open_files(options).await
     }
     #[cfg(target_os = "android")]
     {
-        android::open_files(options)
+        android::open_files(&options)
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {

@@ -15,11 +15,22 @@ name = "gpui-example"
 path = "src/main.rs"
 
 [dependencies]
-gpui-mobile = { path = ".." }
+gpui-mobile = { path = "..", features = ["file_selector"] }
 gpui = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c", package = "gpui", default-features = false }
 reqwest_client = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c", package = "reqwest_client" }
 reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662463bda39148ba154100dd44d3fba5873a4", package = "zed-reqwest", default-features = false, features = ["rustls-tls"] }
 log = "0.4"
+yomichan_rs = { path = "../../yomichan_rs", features = ["anki", "tracing"] }
+parking_lot = { version = "0.12.4", features = ["arc_lock", "serde", "send_guard"] }
+anyhow = "1.0"
+tracing = { version = "0.1", features = ["async-await"] }
+unidecode = "0.3"
+regex = "1.11"
+portable_async_sleep = "0.1"
+rapidhash = { version = "4.1", features = ["unsafe"] }
+getset = "0.1.6"
+indexmap = { version = "2.7", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 objc = "0.2"

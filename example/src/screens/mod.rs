@@ -17,11 +17,14 @@ pub mod audio_player;
 pub mod chat;
 pub mod components;
 pub mod counter;
+pub mod dictionaries;
 pub mod feed;
 pub mod form;
 pub mod home;
 pub mod packages_demo;
+pub mod search;
 pub mod settings;
+pub mod settings_demo;
 pub mod swiper;
 pub mod video_player;
 pub mod webview_browser;
@@ -29,7 +32,7 @@ pub mod webview_browser;
 use crate::demos::{AnimationPlayground, ShaderShowcase};
 use gpui::{
     div, point, prelude::*, px, rgb, size, Bounds, Context, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, SharedString, Window,
+    MouseMoveEvent, MouseUpEvent, SharedString, Window, Entity,
 };
 use gpui_mobile::components::material::{MaterialTheme, NavigationBarBuilder, TopAppBar};
 use gpui_mobile::{set_system_chrome, StatusBarContentStyle, SystemChromeStyle};
@@ -40,10 +43,12 @@ use gpui_mobile::{set_system_chrome, StatusBarContentStyle, SystemChromeStyle};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Screen {
     #[default]
-    Home,
-    Counter,
+    Search,
+    Dictionaries,
     Settings,
     About,
+    Home,
+    Counter,
     AppleGlass,
     Material,
     Form,
@@ -77,10 +82,12 @@ impl Screen {
             return None;
         }
         match path.to_ascii_lowercase().as_str() {
-            "home" => Some(Screen::Home),
-            "counter" => Some(Screen::Counter),
+            "search" => Some(Screen::Search),
+            "dictionaries" => Some(Screen::Dictionaries),
             "settings" => Some(Screen::Settings),
             "about" => Some(Screen::About),
+            "home" => Some(Screen::Home),
+            "counter" => Some(Screen::Counter),
             "apple_glass" | "appleglass" => Some(Screen::AppleGlass),
             "material" => Some(Screen::Material),
             "form" => Some(Screen::Form),
@@ -100,10 +107,12 @@ impl Screen {
     /// Human-readable title for the screen (used in the nav bar).
     pub fn title(&self) -> &'static str {
         match self {
-            Screen::Home => "Home",
-            Screen::Counter => "Counter",
+            Screen::Search => "Search",
+            Screen::Dictionaries => "Dictionaries",
             Screen::Settings => "Settings",
             Screen::About => "About",
+            Screen::Home => "Home",
+            Screen::Counter => "Counter",
             Screen::AppleGlass => "Apple Liquid Glass",
             Screen::Material => "Material Design 3",
             Screen::Form => "Material Form",
@@ -127,7 +136,7 @@ impl Screen {
     pub fn is_tab_root(&self) -> bool {
         matches!(
             self,
-            Screen::Home | Screen::Counter | Screen::Settings | Screen::About
+            Screen::Search | Screen::Dictionaries | Screen::Settings | Screen::About
         )
     }
 }
@@ -182,29 +191,35 @@ pub struct Router {
     pub user_name: SharedString,
     /// A flag toggled in Settings.
     pub dark_mode: bool,
+    /// Global font size multiplier.
+    pub font_size_multiplier: f32,
     /// Navigation history stack for back navigation.
     history: Vec<Screen>,
     /// Safe area insets (logical pixels) to pad around system chrome.
     pub safe_area: SafeArea,
+
+    // ── Yomichan state ───────────────────────────────────────────────────
+    pub search_state: Entity<search::SearchState>,
+    pub dictionaries_state: Entity<dictionaries::DictionariesState>,
+    pub settings_state: Entity<settings::SettingsState>,
 
     // ── Demo view state ──────────────────────────────────────────────────
     /// The animation playground demo (lazily created when the screen is visited).
     animation_playground: Option<AnimationPlayground>,
     /// The shader showcase demo (lazily created when the screen is visited).
     shader_showcase: Option<ShaderShowcase>,
-
 }
 
 impl Router {
-    pub fn new() -> Self {
-        Self::with_initial_screen(Screen::Home)
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::with_initial_screen(Screen::default(), window, cx)
     }
 
     /// Create a router starting at the given screen.
     ///
     /// If the screen is not a tab-root, `Home` is pushed onto the
     /// history stack so the back button works.
-    pub fn with_initial_screen(screen: Screen) -> Self {
+    pub fn with_initial_screen(screen: Screen, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let safe_area = Self::query_safe_area();
 
         let user_name = if cfg!(target_os = "ios") {
@@ -217,16 +232,24 @@ impl Router {
 
         let mut history = Vec::new();
         if !screen.is_tab_root() {
-            history.push(Screen::Home);
+            history.push(Screen::Search);
         }
+
+        let search_state = cx.new(|cx| search::SearchState::new(window, cx));
+        let dictionaries_state = cx.new(|cx| dictionaries::DictionariesState::new(window, cx));
+        let settings_state = cx.new(|cx| settings::SettingsState::new(window, cx));
 
         Self {
             current_screen: screen,
             tap_count: 0,
             user_name: user_name.into(),
             dark_mode: true,
+            font_size_multiplier: 1.2,
             history,
             safe_area,
+            search_state,
+            dictionaries_state,
+            settings_state,
             animation_playground: None,
             shader_showcase: None,
         }
@@ -359,6 +382,10 @@ impl Router {
 impl Render for Router {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         log::info!("Router: render() screen={:?}", self.current_screen);
+        
+        // Apply global font size multiplier
+        window.set_rem_size(px(16.0 * self.font_size_multiplier));
+
         let show_tab_bar = self.current_screen.is_tab_root();
         let theme = gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
         let bg_color = theme.surface;
@@ -478,10 +505,12 @@ impl Router {
         }
 
         let screen_content = match self.current_screen {
-            Screen::Home => self.render_home_screen(cx).into_any_element(),
-            Screen::Counter => self.render_counter_screen(cx).into_any_element(),
+            Screen::Search => self.render_search_screen(cx).into_any_element(),
+            Screen::Dictionaries => self.render_dictionaries_screen(cx).into_any_element(),
             Screen::Settings => self.render_settings_screen(cx).into_any_element(),
             Screen::About => self.render_about_screen(cx).into_any_element(),
+            Screen::Home => self.render_home_screen(cx).into_any_element(),
+            Screen::Counter => self.render_counter_screen(cx).into_any_element(),
             Screen::AppleGlass => self.render_apple_glass_screen(cx).into_any_element(),
             Screen::Material => self.render_material_screen(cx).into_any_element(),
             Screen::Form => self.render_form_screen(cx).into_any_element(),
@@ -534,20 +563,20 @@ impl Router {
 
         NavigationBarBuilder::new(dark)
             .item(
-                "🏠",
-                "Home",
-                current == Screen::Home,
+                "🔍",
+                "Search",
+                current == Screen::Search,
                 cx.listener(move |this, _, _, cx| {
-                    this.navigate_to(Screen::Home);
+                    this.navigate_to(Screen::Search);
                     cx.notify();
                 }),
             )
             .item(
-                "🔢",
-                "Counter",
-                current == Screen::Counter,
+                "📚",
+                "Dicts",
+                current == Screen::Dictionaries,
                 cx.listener(move |this, _, _, cx| {
-                    this.navigate_to(Screen::Counter);
+                    this.navigate_to(Screen::Dictionaries);
                     cx.notify();
                 }),
             )
@@ -574,16 +603,24 @@ impl Router {
 
     // ── Per-screen render helpers ────────────────────────────────────────────
 
+    fn render_search_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        search::render(&self.search_state, self, cx)
+    }
+
+    fn render_dictionaries_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        dictionaries::render(&self.dictionaries_state, self, cx)
+    }
+
+    fn render_settings_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        settings::render(&self.settings_state, self, cx)
+    }
+
     fn render_home_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
         home::render(self, cx)
     }
 
     fn render_counter_screen(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         counter::render(self, cx)
-    }
-
-    fn render_settings_screen(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        settings::render(self, cx)
     }
 
     fn render_about_screen(&self, _cx: &mut Context<Self>) -> impl IntoElement {
