@@ -189,7 +189,7 @@ pub fn render(
                         div().px_4().child("Select a word above")
                     }
                 } else {
-                    div()/* .px_4().child("Type to search...") */
+                    div() /* .px_4().child("Type to search...") */
                 }),
         )
 }
@@ -275,7 +275,12 @@ fn render_dictionary_entry(
             div()
                 .flex()
                 .flex_col()
-                .child(div().text_sm().text_color(rgb(theme.secondary)).child(reading))
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(theme.secondary))
+                        .child(reading),
+                )
                 .child(
                     div()
                         .text_2xl()

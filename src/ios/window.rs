@@ -1146,7 +1146,6 @@ impl IosWindow {
     }
 
     /// Handle a key event from an external keyboard
-    #[deprecated]
     #[deprecated(
         since = "0.0.1",
         note = "Not used because incorrectly hardcodes QWERTY for all virtual keyboards. Use handle_text_input instead."
