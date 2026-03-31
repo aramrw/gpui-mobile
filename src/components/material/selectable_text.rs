@@ -80,29 +80,25 @@ impl SelectableTextView {
         (word_start, word_end)
     }
 
-    fn update_global_hover(&self, range: (usize, usize), cx: &mut ViewContext<Self>) {
+    fn update_global_hover(&self, range: (usize, usize), active_idx: usize, cx: &mut ViewContext<Self>) {
         let (start, end) = range;
         let text = self.text.as_ref();
         
-        // The "active" point is where the finger is (the 'end' of the selection during a drag)
-        let active_idx = end;
+        // Ensure active_idx is within bounds
+        let active_idx = active_idx.clamp(0, text.len());
 
-        // Extract a window of the SELECTED text (max 10 chars) ending at the finger
-        let selected_text_start = text[start..end].char_indices().rev().take(10).last().map(|(idx, _)| start + idx).unwrap_or(start);
-        let mut hovered_text = text[selected_text_start..end].to_string();
-        if selected_text_start > start {
-            hovered_text = format!("...{}", hovered_text);
-        }
+        // Extract a sliding window of the SELECTED text (approx 14 chars around the finger)
+        let window_start_idx = text[start..active_idx].char_indices().rev().take(7).last().map(|(idx, _)| start + idx).unwrap_or(start);
+        let window_end_idx = text[active_idx..end].char_indices().take(7).last().map(|(idx, c)| active_idx + idx + c.len_utf8()).unwrap_or(end);
 
-        // Extract context around the active point
-        // 5 chars before the selection start (or before the window start)
-        let before_window = selected_text_start;
-        let context_before_start = text[..before_window].char_indices().rev().take(5).last().map(|(idx, _)| idx).unwrap_or(0);
-        let context_before = text[context_before_start..before_window].to_string();
+        let hovered_text = text[window_start_idx..window_end_idx].to_string();
+        
+        // Extract context immediately outside the window
+        let context_before_start = text[..window_start_idx].char_indices().rev().take(5).last().map(|(idx, _)| idx).unwrap_or(0);
+        let context_before = text[context_before_start..window_start_idx].to_string();
 
-        // 5 chars after the finger
-        let context_after_end = text[end..].char_indices().take(5).last().map(|(idx, c)| end + idx + c.len_utf8()).unwrap_or(text.len());
-        let context_after = text[end..context_after_end].to_string();
+        let context_after_end = text[window_end_idx..].char_indices().take(5).last().map(|(idx, c)| window_end_idx + idx + c.len_utf8()).unwrap_or(text.len());
+        let context_after = text[window_end_idx..context_after_end].to_string();
 
         cx.set_global(GlobalHoverState {
             text: SharedString::from(hovered_text),
@@ -152,7 +148,7 @@ impl Render for SelectableTextView {
                     let snapped = this.expand_to_word_boundaries(hit);
                     this.anchor_range = Some(snapped);
                     this.selection_range = Some(snapped);
-                    this.update_global_hover(snapped, cx);
+                    this.update_global_hover(snapped, hit.0, cx);
                     cx.notify();
                 }
             }))
@@ -167,11 +163,9 @@ impl Render for SelectableTextView {
                             let end = anchor.1.max(snapped.1);
                             let new_range = Some((start, end));
                             
-                            if this.selection_range != new_range {
-                                this.selection_range = new_range;
-                                this.update_global_hover((start, end), cx);
-                                cx.notify();
-                            }
+                            this.selection_range = new_range;
+                            this.update_global_hover((start, end), current.0, cx);
+                            cx.notify();
                         }
                     }
                 }
