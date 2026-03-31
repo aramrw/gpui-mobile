@@ -267,7 +267,7 @@ impl Render for SelectableTextView {
                                 .absolute()
                                 .size_full()
                             )
-                            .when(is_selected, |this| this.bg(highlight_bg).text_color(rgb(0xFFFFFF)).rounded_sm())
+                            .when(is_selected, |this| this.bg(highlight_bg).text_color(rgb(0xFFFFFF)))
                             .when(!is_selected, |this| this.text_color(text_color))
                             .child(char_str)
                             .into_any_element()
