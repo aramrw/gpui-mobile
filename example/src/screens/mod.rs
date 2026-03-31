@@ -425,8 +425,6 @@ impl Render for Router {
             .when(safe_top > 0.0, |d| {
                 d.child(div().w_full().h(px(safe_top)).bg(rgb(top_color)))
             })
-            // ── Monokakido Zoom Header ───────────────────────────────────
-            .child(self.zoom_header.clone())
             // ── Top navigation bar ───────────────────────────────────────
             .child(self.render_nav_bar(cx))
             // ── Screen content ───────────────────────────────────────────
@@ -439,6 +437,8 @@ impl Render for Router {
             .when(safe_bottom > 0.0 && show_tab_bar, |d| {
                 d.child(div().w_full().h(px(safe_bottom)).bg(rgb(bottom_color)))
             })
+            // ── Monokakido Zoom Header (Last child = Highest Z-Index) ─────
+            .child(self.zoom_header.clone())
             .into_any_element()
     }
 }
