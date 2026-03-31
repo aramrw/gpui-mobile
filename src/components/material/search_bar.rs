@@ -135,6 +135,8 @@ pub struct SearchBar {
     placeholder: Option<String>,
     /// Current query text (if any).
     query: Option<String>,
+    /// Leading element (custom component slot).
+    leading_element: Option<AnyElement>,
     /// Leading icon text (emoji or short string, e.g. "🔍" or "←").
     leading_icon: Option<String>,
     /// Trailing icon text (emoji or short string, e.g. "🎤" or "✕").
@@ -164,6 +166,7 @@ impl SearchBar {
             theme,
             placeholder: None,
             query: None,
+            leading_element: None,
             leading_icon: None,
             trailing_icon: None,
             trailing_icon2: None,
@@ -192,6 +195,12 @@ impl SearchBar {
         } else {
             self.query = Some(t);
         }
+        self
+    }
+
+    /// Set the leading element (e.g. a profile switcher).
+    pub fn leading_element(mut self, element: impl IntoElement) -> Self {
+        self.leading_element = Some(element.into_any_element());
         self
     }
 
@@ -317,9 +326,11 @@ impl IntoElement for SearchBar {
             bar = bar.on_mouse_down(MouseButton::Left, tap_handler);
         }
 
-        // ── Leading icon ─────────────────────────────────────────────────
+        // ── Leading element / icon ───────────────────────────────────────
 
-        if let Some(icon) = self.leading_icon {
+        if let Some(leading_el) = self.leading_element {
+            bar = bar.child(leading_el);
+        } else if let Some(icon) = self.leading_icon {
             if let Some(handler) = self.on_leading_tap {
                 let icon_el = div()
                     .id("search-bar-leading")

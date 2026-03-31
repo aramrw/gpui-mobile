@@ -1,19 +1,28 @@
 use gpui::{
     Context, Entity, IntoElement, ParentElement, Styled,
-    div, rgb, InteractiveElement, StatefulInteractiveElement,
+    div, rgb, InteractiveElement, StatefulInteractiveElement, px, prelude::*,
 };
-use gpui_mobile::components::material::MaterialTheme;
+use gpui_mobile::components::material::{MaterialTheme, Dropdown, PopupModal, ModalPosition, FilledTonalButton, TextButton, FilledButton, TextInput};
+use gpui_mobile::KeyboardType;
 use crate::GlobalYomichan;
 use super::Router;
 
-pub struct SettingsState {}
+pub struct SettingsState {
+    pub profile_dropdown_open: bool,
+    pub show_add_profile_modal: bool,
+    pub new_profile_name: String,
+}
 
 impl SettingsState {
     pub fn new(_window: &mut gpui::Window, _cx: &mut Context<Self>) -> Self {
-        Self {}
+        Self {
+            profile_dropdown_open: false,
+            show_add_profile_modal: false,
+            new_profile_name: String::new(),
+        }
     }
 
-    pub fn switch_profile(name: String, cx: &mut Context<Router>) {
+    pub fn switch_profile(name: String, cx: &mut gpui::App) {
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         {
             let ycd = global_yomichan.read();
@@ -24,6 +33,35 @@ impl SettingsState {
             }
             let _ = ycd.update_options();
         }
+        // Notify all router instances that state changed
+        // This is a bit tricky if we don't have the router entity, 
+        // but GlobalYomichan update might be enough if listeners are set.
+    }
+
+    pub fn add_profile(&mut self, cx: &mut Context<Self>) {
+        if self.new_profile_name.is_empty() {
+            return;
+        }
+
+        let name = self.new_profile_name.clone();
+        let global_yomichan = cx.global::<GlobalYomichan>().clone();
+        {
+            let ycd = global_yomichan.read();
+            let opts = ycd.options();
+            let mut opts_guard = opts.write();
+            
+            if !opts_guard.profiles.contains_key(&name) {
+                let current_profile = opts_guard.profiles.get_index(opts_guard.current_profile).map(|(_, v)| v.clone()).unwrap_or_default();
+                opts_guard.profiles.insert(name.clone(), current_profile);
+                if let Some(idx) = opts_guard.profiles.get_index_of(&name) {
+                    opts_guard.current_profile = idx;
+                }
+            }
+            let _ = ycd.update_options();
+        }
+        
+        self.new_profile_name.clear();
+        self.show_add_profile_modal = false;
         cx.notify();
     }
 
@@ -34,8 +72,6 @@ impl SettingsState {
         
         log::info!("NUKING DATABASE at {:?}", data_dir);
         
-        // Note: The database file might be locked if Yomichan is still active.
-        // We try to nuke it anyway. The user should restart the app after this.
         match yomichan_rs::Yomichan::nuke_database(&data_dir) {
             Ok(_) => {
                 log::info!("Successfully nuked database. Quitting app for restart.");
@@ -48,7 +84,7 @@ impl SettingsState {
     }
 }
 
-pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
+pub fn render(state: &Entity<SettingsState>, search_state: &Entity<super::search::SearchState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
     let text_color = theme.on_surface;
@@ -63,86 +99,239 @@ pub fn render(_state: &Entity<SettingsState>, router: &Router, cx: &mut Context<
         (opts.profiles.keys().cloned().collect::<Vec<String>>(), opts.current_profile)
     };
 
+    let current_profile_name = profiles.get(current_profile_idx).cloned().unwrap_or_else(|| "Default".to_string());
+
+    let state_read = state.read(cx);
+    let show_modal = state_read.show_add_profile_modal;
+
     div()
         .id("settings-page")
+        .relative()
         .flex()
         .flex_col()
         .size_full()
-        .gap_4()
-        .px_4()
-        .py_6()
-        .overflow_y_scroll()
-        // ── Section: Appearance ───────────────────────────────────────────
-        .child(section_header("Appearance", sub_text))
-        .child(
-            settings_card(card_bg)
-                .child(toggle_row(
-                    "Dark Mode",
-                    "Use a dark colour scheme",
-                    dark_mode,
-                    text_color,
-                    sub_text,
-                    theme,
-                    cx.listener(|this, _, _, cx| {
-                        this.dark_mode = !this.dark_mode;
-                        cx.notify();
-                    }),
-                ))
-                .child(div().h_px().bg(rgb(theme.surface_container_low)))
-                .child(action_row(
-                    "Font Size",
-                    &format!("{:.1}x multiplier", router.font_size_multiplier),
-                    false,
-                    theme,
-                    cx.listener(|this, _, _, cx| {
-                        if this.font_size_multiplier >= 1.5 {
-                            this.font_size_multiplier = 1.0;
-                        } else {
-                            this.font_size_multiplier += 0.1;
-                        }
-                        cx.notify();
-                    }),
-                ))
-        )
-        // ── Section: Profiles ─────────────────────────────────────────────
-        .child(section_header("Profiles", sub_text))
-        .child(
-            settings_card(card_bg)
-                .children(profiles.into_iter().enumerate().map(|(i, name): (usize, String)| {
-                    let active = i == current_profile_idx;
-                    let name_clone = name.clone();
-                    action_row(
-                        &name,
-                        if active { "Active" } else { "Switch to this profile" },
-                        active,
-                        theme,
-                        cx.listener(move |_, _, _, cx| {
-                            SettingsState::switch_profile(name_clone.clone(), cx);
-                        }),
-                    )
-                }))
-        )
-        // ── Section: Developer ────────────────────────────────────────────
-        .child(section_header("Developer", sub_text))
-        .child(
-            settings_card(card_bg)
-                .child(action_row(
-                    "Nuke Database",
-                    "Delete all dictionary data and settings",
-                    false,
-                    theme,
-                    cx.listener(|_, _, _, cx| {
-                        SettingsState::nuke_database(cx);
-                    }),
-                ))
-        )
         .child(
             div()
-                .mt_4()
-                .text_xs()
-                .text_center()
-                .text_color(rgb(sub_text))
-                .child("Ported from ycd-rs")
+                .flex()
+                .flex_col()
+                .size_full()
+                .gap_4()
+                .px_4()
+                .py_6()
+                .overflow_y_hidden()
+                .child(section_header("Appearance", sub_text))
+                .child(
+                    settings_card(card_bg)
+                        .child(toggle_row(
+                            "Dark Mode",
+                            "Use a dark colour scheme",
+                            dark_mode,
+                            text_color,
+                            sub_text,
+                            theme,
+                            cx.listener(|this, _, _, cx| {
+                                this.dark_mode = !this.dark_mode;
+                                cx.notify();
+                            }),
+                        ))
+                        .child(div().h_px().bg(rgb(theme.surface_container_low)))
+                        .child(action_row(
+                            "Font Size",
+                            &format!("{:.1}x multiplier", router.font_size_multiplier),
+                            false,
+                            theme,
+                            cx.listener(|this, _, _, cx| {
+                                if this.font_size_multiplier >= 1.5 {
+                                    this.font_size_multiplier = 1.0;
+                                } else {
+                                    this.font_size_multiplier += 0.1;
+                                }
+                                cx.notify();
+                            }),
+                        ))
+                )
+                .child(section_header("Profiles", sub_text))
+                .child(
+                    settings_card(card_bg)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .justify_between()
+                                .px_4()
+                                .py_3()
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .child(div().text_base().text_color(rgb(text_color)).child("Active Profile"))
+                                        .child(div().text_xs().text_color(rgb(sub_text)).child("Switch or add profiles"))
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .gap_2()
+                                        .child({
+                                            let mut dropdown = Dropdown::new(current_profile_name, theme)
+                                                .open(state_read.profile_dropdown_open)
+                                                .on_toggle(cx.listener({
+                                                    let state = state.clone();
+                                                    move |_, _, _, cx| {
+                                                        state.update(cx, |s, cx| {
+                                                            s.profile_dropdown_open = !s.profile_dropdown_open;
+                                                            cx.notify();
+                                                        });
+                                                    }
+                                                }));
+                                            
+                                            for name in &profiles {
+                                                let name_clone = name.clone();
+                                                let state = state.clone();
+                                                dropdown = dropdown.item(name, move |_, _, cx| {
+                                                    SettingsState::switch_profile(name_clone.clone(), cx);
+                                                    let _ = state.update(cx, |s, cx| {
+                                                        s.profile_dropdown_open = false;
+                                                        cx.notify();
+                                                    });
+                                                });
+                                            }
+                                            dropdown
+                                        })
+                                        .child(
+                                            FilledTonalButton::new("+", theme)
+                                                .on_click(cx.listener({
+                                                    let state = state.clone();
+                                                    move |_, _, _, cx| {
+                                                        state.update(cx, |s, cx| {
+                                                            s.show_add_profile_modal = true;
+                                                            cx.notify();
+                                                        });
+                                                    }
+                                                }))
+                                        )
+                                )
+                        )
+                )
+                .child(section_header("Developer", sub_text))
+                .child(
+                    settings_card(card_bg)
+                        .child(action_row(
+                            "Nuke Database",
+                            "Delete all dictionary data and settings",
+                            false,
+                            theme,
+                            cx.listener(|_, _, _, cx| {
+                                SettingsState::nuke_database(cx);
+                            }),
+                        ))
+                )
+                .child(
+                    div()
+                        .mt_4()
+                        .text_xs()
+                        .text_center()
+                        .text_color(rgb(sub_text))
+                        .child("Ported from ycd-rs")
+                )
+        )
+        .when(show_modal, |this| {
+            this.child(render_add_profile_modal(state, search_state, theme, cx))
+        })
+}
+
+fn render_add_profile_modal(state: &Entity<SettingsState>, search_state: &Entity<super::search::SearchState>, theme: MaterialTheme, cx: &mut Context<Router>) -> impl IntoElement {
+    let state_read = state.read(cx);
+    let name_value = state_read.new_profile_name.clone();
+
+    PopupModal::new(theme)
+        .position(ModalPosition::Center)
+        .on_close({
+            let state = state.clone();
+            move |_, cx| {
+                let _ = state.update(cx, |s, cx| {
+                    s.show_add_profile_modal = false;
+                    cx.notify();
+                });
+            }
+        })
+        .child(
+            div()
+                .w(px(300.0))
+                .p_6()
+                .rounded_xl()
+                .bg(rgb(theme.surface_container_high))
+                .flex()
+                .flex_col()
+                .gap_4()
+                .child(div().text_lg().text_color(rgb(theme.on_surface)).child("Add Profile"))
+                .child(
+                    TextInput::new("profile-name", theme)
+                        .label("Profile Name")
+                        .placeholder("Enter name...")
+                        .value(&name_value)
+                        .focused(true)
+                        .on_tap_notify({
+                            let state = state.clone();
+                            let search_state = search_state.clone();
+                            let async_cx = cx.to_async();
+                            move |_| {
+                                let state = state.clone();
+                                let search_state = search_state.clone();
+                                let async_cx = async_cx.clone();
+                                gpui_mobile::show_keyboard_with_type(KeyboardType::Default);
+                                gpui_mobile::set_text_input_callback(Some(Box::new(move |text| {
+                                    let state = state.clone();
+                                    let search_state = search_state.clone();
+                                    let text = text.to_string();
+                                    let _ = async_cx.update(move |cx| {
+                                        let _ = state.update(cx, |s, cx| {
+                                            if text == "\x08" {
+                                                s.new_profile_name.pop();
+                                            } else if text != "\n" {
+                                                s.new_profile_name.push_str(&text);
+                                            }
+                                            cx.notify();
+                                        });
+                                        let _ = search_state.update(cx, |_, cx| cx.notify());
+                                    });
+                                })));
+                            }
+                        })
+                        .render(cx)
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .justify_end()
+                        .gap_2()
+                        .child(
+                            TextButton::new("Cancel", theme)
+                                .on_click(cx.listener({
+                                    let state = state.clone();
+                                    move |_, _, _, cx| {
+                                        state.update(cx, |s, cx| {
+                                            s.show_add_profile_modal = false;
+                                            cx.notify();
+                                        });
+                                    }
+                                }))
+                        )
+                        .child(
+                            FilledButton::new("Create", theme)
+                                .on_click(cx.listener({
+                                    let state = state.clone();
+                                    move |_, _, _, cx| {
+                                        state.update(cx, |s, cx| {
+                                            s.add_profile(cx);
+                                        });
+                                    }
+                                }))
+                        )
+                )
         )
 }
 

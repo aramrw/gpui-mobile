@@ -1,9 +1,9 @@
 use gpui::{
     div, prelude::FluentBuilder, rgb, App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, Task, WeakEntity, SharedString,
+    StatefulInteractiveElement, Styled, Task, WeakEntity, SharedString, px,
 };
 use gpui_mobile::components::material::search_bar::SearchBar;
-use gpui_mobile::components::material::{MaterialTheme, SelectableTextView};
+use gpui_mobile::components::material::{MaterialTheme, SelectableTextView, Dropdown};
 use gpui_mobile::{set_text_input_callback, show_keyboard};
 use regex::Regex;
 use std::sync::LazyLock;
@@ -21,6 +21,7 @@ pub struct SearchState {
     pub search_task: Option<Task<()>>,
     pub selected_term_index: Option<usize>,
     pub view_cache: HashMap<String, Entity<SelectableTextView>>,
+    pub profile_dropdown_open: bool,
 }
 
 impl SearchState {
@@ -31,6 +32,7 @@ impl SearchState {
             search_task: None,
             selected_term_index: None,
             view_cache: HashMap::new(),
+            profile_dropdown_open: false,
         }
     }
 
@@ -109,14 +111,24 @@ pub fn render(
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
 
-    let (query, results, selected_index) = {
+    let (query, results, selected_index, profile_open) = {
         let state = search_state.read(cx);
         (
             state.query.clone(),
             state.search_results.clone(),
             state.selected_term_index,
+            state.profile_dropdown_open,
         )
     };
+
+    let global_yomichan = cx.global::<GlobalYomichan>().clone();
+    let (profiles, current_profile_idx) = {
+        let ycd = global_yomichan.read();
+        let opts_ptr = ycd.options();
+        let opts = opts_ptr.read();
+        (opts.profiles.keys().cloned().collect::<Vec<String>>(), opts.current_profile)
+    };
+    let current_profile_name = profiles.get(current_profile_idx).cloned().unwrap_or_else(|| "Default".to_string());
 
     let search_state_handle = search_state.clone();
     let search_state_handle_for_trailing = search_state.clone();
@@ -133,6 +145,36 @@ pub fn render(
             SearchBar::new(theme)
                 .query(query.clone())
                 .placeholder("Search term...")
+                .leading_element({
+                    let mut dropdown = Dropdown::new(
+                        current_profile_name.chars().next().unwrap_or('P').to_string(),
+                        theme
+                    )
+                    .open(profile_open)
+                    .on_toggle(cx.listener({
+                        let search_state = search_state.clone();
+                        move |_, _, _, cx| {
+                            search_state.update(cx, |s, cx| {
+                                s.profile_dropdown_open = !s.profile_dropdown_open;
+                                cx.notify();
+                            });
+                        }
+                    }));
+                    
+                    for name in &profiles {
+                        let name_clone = name.clone();
+                        let search_state = search_state.clone();
+                        dropdown = dropdown.item(name, move |_, _, cx| {
+                            super::settings::SettingsState::switch_profile(name_clone.clone(), cx);
+                            let _ = search_state.update(cx, |state, cx| {
+                                state.profile_dropdown_open = false;
+                                state.view_cache.clear();
+                                cx.notify();
+                            });
+                        });
+                    }
+                    dropdown
+                })
                 .on_tap(cx.listener(move |_, _, _, cx| {
                     let search_state_handle = search_state_handle.clone();
                     let async_cx = cx.to_async();
@@ -184,7 +226,7 @@ pub fn render(
             div()
                 .id("search-results")
                 .flex_1()
-                .overflow_y_scroll()
+                .overflow_scroll()
                 .on_mouse_down(
                     gpui::MouseButton::Left,
                     cx.listener(|_, _, _, _| {
@@ -367,55 +409,4 @@ fn render_dictionary_entry(
                 ),
         )
         .children(definitions)
-}
-
-fn render_search_result(res: TermSearchResultsSegment, theme: MaterialTheme) -> impl IntoElement {
-    let entries = res
-        .results
-        .as_ref()
-        .map(|r| r.dictionary_entries.clone())
-        .unwrap_or_default();
-
-    div()
-        .flex()
-        .flex_col()
-        .bg(rgb(theme.surface_container_high))
-        .p_4()
-        .rounded_xl()
-        .gap_2()
-        .child(
-            div().flex().flex_row().justify_between().child(
-                div()
-                    .text_lg()
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(rgb(theme.on_surface))
-                    .child(res.text.clone()),
-            ),
-        )
-        .children(entries.into_iter().map(|entry| {
-            let headword = entry
-                .headwords
-                .first()
-                .map(|h| format!("{} [{}]", h.term, h.reading))
-                .unwrap_or_default();
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    div()
-                        .text_sm()
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(rgb(theme.primary))
-                        .child(headword),
-                )
-                .children(entry.definitions.into_iter().flat_map(|def| {
-                    def.entries.into_iter().map(|gloss| {
-                        div()
-                            .text_xs()
-                            .text_color(rgb(theme.on_surface))
-                            .child(gloss.plain_text)
-                    })
-                }))
-        }))
 }

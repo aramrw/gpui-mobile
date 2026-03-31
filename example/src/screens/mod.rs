@@ -628,7 +628,7 @@ impl Router {
     }
 
     fn render_settings_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        settings::render(&self.settings_state, self, cx)
+        settings::render(&self.settings_state, &self.search_state, self, cx)
     }
 
     fn render_home_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
