@@ -394,10 +394,19 @@ enum TouchState {
     /// No active touch.
     Idle,
     /// Finger is down but hasn't moved beyond the slop threshold.
-    Pending { start_x: f32, start_y: f32 },
+    Pending {
+        start_x: f32,
+        start_y: f32,
+        start_time: std::time::Instant,
+    },
     /// Finger has moved beyond the threshold — we are scrolling.
     Scrolling { prev_x: f32, prev_y: f32 },
+    /// Finger was held down for > 200ms without moving.
+    LongPressed,
 }
+
+/// Threshold for long-press detection (Monokakido-style).
+const LONG_PRESS_THRESHOLD: std::time::Duration = std::time::Duration::from_millis(200);
 
 pub(crate) struct IosWindow {
     /// The UIWindow object
@@ -784,26 +793,26 @@ impl IosWindow {
                 ts = TouchState::Pending {
                     start_x: logical_x,
                     start_y: logical_y,
+                    start_time: std::time::Instant::now(),
                 };
                 // Do NOT emit MouseDown here — wait until we know whether
-                // this is a tap or a scroll.  Emitting MouseDown immediately
-                // causes accidental navigation when the user starts scrolling
-                // near a button/tab.
-                //
-                // - Tap (finger lifts within slop) → emit MouseDown + MouseUp
-                //   together in Ended phase.
-                // - Scroll (finger exceeds slop) → emit only MouseMove +
-                //   ScrollWheel, no MouseDown.
+                // this is a tap, a scroll, or a long-press.
             }
 
-            UITouchPhase::Moved => {
+            UITouchPhase::Moved | UITouchPhase::Stationary => {
                 // Record every move for velocity estimation.
-                self.velocity_tracker
-                    .borrow_mut()
-                    .record(logical_x, logical_y);
+                if phase == UITouchPhase::Moved {
+                    self.velocity_tracker
+                        .borrow_mut()
+                        .record(logical_x, logical_y);
+                }
 
                 match ts {
-                    TouchState::Pending { start_x, start_y } => {
+                    TouchState::Pending {
+                        start_x,
+                        start_y,
+                        start_time,
+                    } => {
                         let dx = logical_x - start_x;
                         let dy = logical_y - start_y;
                         let distance = (dx * dx + dy * dy).sqrt();
@@ -824,10 +833,21 @@ impl IosWindow {
                                 modifiers,
                                 touch_phase: gpui::TouchPhase::Started,
                             }));
+                        } else if start_time.elapsed() > LONG_PRESS_THRESHOLD {
+                            // Promote to long-press — emit a special mouse down.
+                            // We use Button::Other(255) as a sentinel for Monokakido selection.
+                            ts = TouchState::LongPressed;
+                            log::info!("GPUI iOS: LongPress detected at ({}, {}). Emitting MouseDown(Right)", logical_x, logical_y);
+                            emit(PlatformInput::MouseDown(gpui::MouseDownEvent {
+                                button: gpui::MouseButton::Right,
+                                position,
+                                modifiers,
+                                click_count: 1,
+                                first_mouse: false,
+                            }));
                         }
                         // Always emit MouseMove so interactive screens can
-                        // track finger position (e.g. drag line in Animations,
-                        // gradient control in Shaders).
+                        // track finger position.
                         emit(PlatformInput::MouseMove(gpui::MouseMoveEvent {
                             position,
                             modifiers,
@@ -835,27 +855,37 @@ impl IosWindow {
                         }));
                     }
                     TouchState::Scrolling { prev_x, prev_y } => {
-                        let dx = logical_x - prev_x;
-                        let dy = logical_y - prev_y;
-                        ts = TouchState::Scrolling {
-                            prev_x: logical_x,
-                            prev_y: logical_y,
-                        };
-                        // Scroll event for scrollable containers.
-                        emit(PlatformInput::ScrollWheel(gpui::ScrollWheelEvent {
-                            position,
-                            delta: gpui::ScrollDelta::Pixels(gpui::point(
-                                gpui::px(dx),
-                                gpui::px(dy),
-                            )),
-                            modifiers,
-                            touch_phase: gpui::TouchPhase::Moved,
-                        }));
+                        if phase == UITouchPhase::Moved {
+                            let dx = logical_x - prev_x;
+                            let dy = logical_y - prev_y;
+                            ts = TouchState::Scrolling {
+                                prev_x: logical_x,
+                                prev_y: logical_y,
+                            };
+                            // Scroll event for scrollable containers.
+                            emit(PlatformInput::ScrollWheel(gpui::ScrollWheelEvent {
+                                position,
+                                delta: gpui::ScrollDelta::Pixels(gpui::point(
+                                    gpui::px(dx),
+                                    gpui::px(dy),
+                                )),
+                                modifiers,
+                                touch_phase: gpui::TouchPhase::Moved,
+                            }));
+                        }
                         // MouseMove for interactive screens.
                         emit(PlatformInput::MouseMove(gpui::MouseMoveEvent {
                             position,
                             modifiers,
                             pressed_button: Some(gpui::MouseButton::Left),
+                        }));
+                    }
+                    TouchState::LongPressed => {
+                        // Already in selection mode. Emit special MouseMove.
+                        emit(PlatformInput::MouseMove(gpui::MouseMoveEvent {
+                            position,
+                            modifiers,
+                            pressed_button: Some(gpui::MouseButton::Right),
                         }));
                     }
                     TouchState::Idle => {
@@ -867,11 +897,12 @@ impl IosWindow {
             UITouchPhase::Ended | UITouchPhase::Cancelled => {
                 self.touch_pressed.set(false);
                 match ts {
-                    TouchState::Pending { start_x, start_y } => {
-                        // Finger lifted without exceeding slop → tap.
-                        // Emit MouseDown + MouseUp together at the original
-                        // down position so hit-testing matches the initial
-                        // touch point.
+                    TouchState::Pending {
+                        start_x,
+                        start_y,
+                        ..
+                    } => {
+                        // Finger lifted without exceeding slop or threshold → tap.
                         self.velocity_tracker.borrow_mut().reset();
                         let tap_pos = gpui::point(gpui::px(start_x), gpui::px(start_y));
                         emit(PlatformInput::MouseDown(gpui::MouseDownEvent {
@@ -902,7 +933,7 @@ impl IosWindow {
                             touch_phase: gpui::TouchPhase::Ended,
                         }));
                         // Also emit MouseUp so interactive screens can
-                        // detect the end of a drag (e.g. fling a ball).
+                        // detect the end of a drag.
                         emit(PlatformInput::MouseUp(gpui::MouseUpEvent {
                             button: gpui::MouseButton::Left,
                             position,
@@ -910,26 +941,24 @@ impl IosWindow {
                             click_count: 1,
                         }));
 
-                        // ── Start momentum / inertia scrolling ───────────
-                        // Compute release velocity from recent touch samples
-                        // and kick off the momentum scroller.  Subsequent
-                        // frames will pump synthetic ScrollWheel events via
-                        // `pump_momentum()` until velocity decays below the
-                        // threshold.
                         let (vx, vy) = self.velocity_tracker.borrow().velocity();
                         self.velocity_tracker.borrow_mut().reset();
                         self.momentum_scroller
                             .borrow_mut()
                             .fling(vx, vy, logical_x, logical_y);
                     }
+                    TouchState::LongPressed => {
+                        // Selection finished. Emit special MouseUp.
+                        emit(PlatformInput::MouseUp(gpui::MouseUpEvent {
+                            button: gpui::MouseButton::Right,
+                            position,
+                            modifiers,
+                            click_count: 1,
+                        }));
+                    }
                     TouchState::Idle => {}
                 }
                 ts = TouchState::Idle;
-            }
-
-            UITouchPhase::Stationary => {
-                // No change — ignore.
-                return;
             }
         }
 

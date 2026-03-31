@@ -1,12 +1,13 @@
 use gpui::{
-    div, rgb, AsyncApp, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, Task, WeakEntity,
+    div, prelude::FluentBuilder, rgb, App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement, ParentElement,
+    StatefulInteractiveElement, Styled, Task, WeakEntity, SharedString,
 };
 use gpui_mobile::components::material::search_bar::SearchBar;
-use gpui_mobile::components::material::MaterialTheme;
+use gpui_mobile::components::material::{MaterialTheme, SelectableTextView};
 use gpui_mobile::{set_text_input_callback, show_keyboard};
 use regex::Regex;
 use std::sync::LazyLock;
+use std::collections::HashMap;
 use yomichan_rs::TermSearchResultsSegment;
 
 use super::Router;
@@ -19,6 +20,7 @@ pub struct SearchState {
     pub search_results: Option<Vec<TermSearchResultsSegment>>,
     pub search_task: Option<Task<()>>,
     pub selected_term_index: Option<usize>,
+    pub view_cache: HashMap<String, Entity<SelectableTextView>>,
 }
 
 impl SearchState {
@@ -28,6 +30,7 @@ impl SearchState {
             search_results: None,
             search_task: None,
             selected_term_index: None,
+            view_cache: HashMap::new(),
         }
     }
 
@@ -64,6 +67,7 @@ impl SearchState {
 
                     let _ = this_handle.update(&mut cx, |this, cx| {
                         this.search_results = results;
+                        this.view_cache.clear();
                         if this.selected_term_index.is_none() && this.search_results.is_some() {
                             this.selected_term_index = Some(0);
                         }
@@ -73,6 +77,27 @@ impl SearchState {
             },
         );
         self.search_task = Some(new_search_task);
+    }
+
+    pub fn get_or_create_view(
+        &mut self, 
+        key: &str, 
+        text: SharedString, 
+        theme: MaterialTheme, 
+        lookup_handler: impl Fn(&str, &mut App) + 'static,
+        cx: &mut impl AppContext
+    ) -> Entity<SelectableTextView> {
+        if let Some(view) = self.view_cache.get(key) {
+            return view.clone();
+        }
+
+        let view = cx.new(|cx| {
+            let mut view = SelectableTextView::new(text, theme, cx);
+            view.on_lookup(lookup_handler);
+            view
+        });
+        self.view_cache.insert(key.to_string(), view.clone());
+        view
     }
 }
 
@@ -149,6 +174,7 @@ pub fn render(
                         state.query.clear();
                         state.search_results = None;
                         state.selected_term_index = None;
+                        state.view_cache.clear();
                         cx.notify();
                     });
                 })),
@@ -170,18 +196,20 @@ pub fn render(
                         div().px_4().child("No results found.")
                     } else if let Some(selected_index) = selected_index {
                         if let Some(segment) = results.get(selected_index) {
-                            div().flex().flex_col().gap_1().px_2().children(
-                                segment
-                                    .results
-                                    .as_ref()
-                                    .map(|r| {
-                                        r.dictionary_entries
-                                            .iter()
-                                            .map(|entry| render_dictionary_entry(entry, theme))
-                                            .collect::<Vec<_>>()
-                                    })
-                                    .unwrap_or_default(),
-                            )
+                            let search_state = search_state.clone();
+                            let mut dictionary_entries = Vec::new();
+                            if let Some(r) = &segment.results {
+                                for (entry_idx, entry) in r.dictionary_entries.iter().enumerate() {
+                                    dictionary_entries.push(render_dictionary_entry(
+                                        entry,
+                                        entry_idx,
+                                        theme,
+                                        &search_state,
+                                        cx,
+                                    ));
+                                }
+                            }
+                            div().flex().flex_col().gap_1().px_2().children(dictionary_entries)
                         } else {
                             div().px_4().child("Select a word above")
                         }
@@ -189,7 +217,7 @@ pub fn render(
                         div().px_4().child("Select a word above")
                     }
                 } else {
-                    div() /* .px_4().child("Type to search...") */
+                    div()
                 }),
         )
 }
@@ -214,7 +242,6 @@ fn render_segment_selector(
             .px_2()
             .py_2()
             .children(results.into_iter().enumerate().filter_map(|(i, segment)| {
-                // Filter out segments that are just whitespace or empty
                 if segment.text.trim().is_empty() {
                     return None;
                 }
@@ -245,6 +272,7 @@ fn render_segment_selector(
                             cx.listener(move |_, _, _, cx| {
                                 let _ = search_state_handle.update(cx, |state, cx| {
                                     state.selected_term_index = Some(i);
+                                    state.view_cache.clear();
                                     cx.notify();
                                 });
                             }),
@@ -258,11 +286,60 @@ fn render_segment_selector(
 
 fn render_dictionary_entry(
     entry: &yomichan_rs::TermDictionaryEntry,
+    entry_idx: usize,
     theme: MaterialTheme,
+    search_state: &Entity<SearchState>,
+    cx: &mut Context<Router>,
 ) -> impl IntoElement {
     let headword = entry.headwords.first();
     let term = headword.map(|h| h.term.clone()).unwrap_or_default();
     let reading = headword.map(|h| h.reading.clone()).unwrap_or_default();
+
+    let search_state_handle_for_lookup = search_state.clone();
+    let lookup_handler = move |text: &str, cx: &mut App| {
+        let text = text.to_string();
+        let _ = search_state_handle_for_lookup.update(cx, |state, cx| {
+            state.query = text.clone();
+            state.queue_search(&text, cx, true);
+            cx.notify();
+        });
+    };
+
+    let search_state_handle = search_state.clone();
+
+    let mut definitions = Vec::new();
+    for (def_idx, def) in entry.definitions.iter().enumerate() {
+        for (gloss_idx, gloss) in def.entries.iter().enumerate() {
+            let lookup_handler = lookup_handler.clone();
+            let key = format!("entry-{}-def-{}-gloss-{}", entry_idx, def_idx, gloss_idx);
+            let text = SharedString::from(gloss.plain_text.clone());
+            
+            let view = search_state_handle.update(cx, |state: &mut SearchState, cx| {
+                state.get_or_create_view(&key, text, theme, lookup_handler, cx)
+            });
+
+            definitions.push(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .text_lg()
+                    .text_color(rgb(theme.on_surface))
+                    .child(view)
+            );
+        }
+    }
+
+    let reading_key = format!("entry-{}-reading", entry_idx);
+    let term_key = format!("entry-{}-term", entry_idx);
+    
+    let reading_view = search_state_handle.update(cx, |state: &mut SearchState, cx| {
+        state.get_or_create_view(&reading_key, SharedString::from(reading), theme, lookup_handler.clone(), cx)
+    });
+    
+    let term_view = search_state_handle.update(cx, |state: &mut SearchState, cx| {
+        state.get_or_create_view(&term_key, SharedString::from(term), theme, lookup_handler.clone(), cx)
+    });
 
     div()
         .flex()
@@ -279,32 +356,20 @@ fn render_dictionary_entry(
                     div()
                         .text_sm()
                         .text_color(rgb(theme.secondary))
-                        .child(reading),
+                        .child(reading_view),
                 )
                 .child(
                     div()
                         .text_2xl()
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(rgb(theme.primary))
-                        .child(term),
+                        .child(term_view),
                 ),
         )
-        .children(entry.definitions.iter().flat_map(|def| {
-            def.entries
-                .iter()
-                .map(|gloss| {
-                    div()
-                        .text_lg()
-                        .text_color(rgb(theme.on_surface))
-                        .child(gloss.plain_text.clone())
-                })
-                .collect::<Vec<_>>()
-        }))
+        .children(definitions)
 }
 
 fn render_search_result(res: TermSearchResultsSegment, theme: MaterialTheme) -> impl IntoElement {
-    // This function is now deprecated in favor of segmented rendering above,
-    // but kept for reference or single-result cases if needed.
     let entries = res
         .results
         .as_ref()

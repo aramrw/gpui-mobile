@@ -133,6 +133,7 @@ pub mod text_input;
 pub mod dialog;
 pub mod menu;
 pub mod progress_indicator;
+pub mod selectable_text;
 pub mod search_bar;
 
 // ── Containers & content ─────────────────────────────────────────────────────
@@ -208,6 +209,7 @@ pub use dialog::{BasicDialog, FullScreenDialog, SimpleDialog};
 pub use menu::{Menu, MenuAnchor};
 pub use progress_indicator::{CircularProgressIndicator, LinearProgressIndicator};
 pub use search_bar::{SearchBar, SearchView};
+pub use selectable_text::SelectableTextView;
 pub use snackbar::snackbar;
 pub use text_field::TextField;
 pub use text_input::TextInput;

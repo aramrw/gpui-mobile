@@ -83,6 +83,18 @@ thread_local! {
 
     /// X coordinate of the last tap on a text field (for cursor positioning).
     static TAPPED_X: RefCell<Option<f32>> = RefCell::new(None);
+
+    /// X coordinate of the last Monokakido-style selection start.
+    static TAPPED_SELECTION_START_X: RefCell<Option<f32>> = RefCell::new(None);
+
+    /// Time when the selection started.
+    static TAPPED_SELECTION_START_TIME: RefCell<Option<std::time::Instant>> = RefCell::new(None);
+
+    /// Current finger X during a selection drag.
+    static TAPPED_SELECTION_MOVE_X: RefCell<Option<f32>> = RefCell::new(None);
+
+    /// X coordinate where the selection ended.
+    static TAPPED_SELECTION_END_X: RefCell<Option<f32>> = RefCell::new(None);
 }
 
 /// Install the keyboard callback that pushes typed text into PENDING_TEXT.
@@ -147,6 +159,71 @@ pub fn drain_pending_text() {
                     _ => return,
                 };
                 field.set_cursor_from_x(x, TEXT_START_X, AVG_CHAR_WIDTH);
+            });
+        }
+    });
+
+    // Process selection start
+    TAPPED_SELECTION_START_X.with(|x_cell| {
+        if let Some(x) = x_cell.borrow_mut().take() {
+            FORM_STATE.with(|s| {
+                let mut state = s.borrow_mut();
+                let field = match state.form.focused_field {
+                    Some(0) => &mut state.form.full_name,
+                    Some(1) => &mut state.form.email,
+                    Some(2) => &mut state.form.phone,
+                    _ => return,
+                };
+                field.start_selection_from_x(x, TEXT_START_X, AVG_CHAR_WIDTH);
+                TAPPED_SELECTION_START_TIME.with(|t| *t.borrow_mut() = Some(std::time::Instant::now()));
+            });
+        }
+    });
+
+    // Process selection movement
+    TAPPED_SELECTION_MOVE_X.with(|x_cell| {
+        if let Some(x) = x_cell.borrow_mut().take() {
+            FORM_STATE.with(|s| {
+                let mut state = s.borrow_mut();
+                let field = match state.form.focused_field {
+                    Some(0) => &mut state.form.full_name,
+                    Some(1) => &mut state.form.email,
+                    Some(2) => &mut state.form.phone,
+                    _ => return,
+                };
+                field.move_selection_to_x(x, TEXT_START_X, AVG_CHAR_WIDTH);
+            });
+        }
+    });
+
+    // Process selection end
+    TAPPED_SELECTION_END_X.with(|x_cell| {
+        if let Some(_x) = x_cell.borrow_mut().take() {
+            FORM_STATE.with(|s| {
+                let mut state = s.borrow_mut();
+                let field = match state.form.focused_field {
+                    Some(0) => &mut state.form.full_name,
+                    Some(1) => &mut state.form.email,
+                    Some(2) => &mut state.form.phone,
+                    _ => return,
+                };
+
+                let start_time = TAPPED_SELECTION_START_TIME.with(|t| t.borrow_mut().take());
+                if let Some(start_time) = start_time {
+                    let duration = start_time.elapsed();
+                    if duration < std::time::Duration::from_millis(600) {
+                        // Fast hover (lift within 600ms) -> Lookup
+                        if let Some((min, max)) = field.normalized_selection() {
+                            let selected_text = &field.text[min..max];
+                            if !selected_text.is_empty() {
+                                log::info!("Form: Monokakido Lookup triggered for: '{}'", selected_text);
+                                // In a real implementation, we would navigate to search results
+                            }
+                        }
+                    } else {
+                        log::info!("Form: Selection persisted (held for {:?})", duration);
+                    }
+                }
             });
         }
     });
@@ -314,6 +391,19 @@ pub fn render(router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
                                     install_keyboard_callback();
                                     gpui_mobile::show_keyboard_with_type(KeyboardType::Default);
                                 })
+                                .on_selection_start(|event| {
+                                    TAPPED_FIELD.with(|f| *f.borrow_mut() = Some(0));
+                                    TAPPED_SELECTION_START_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
+                                    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+                                })
+                                .on_selection_move(|event| {
+                                    TAPPED_SELECTION_MOVE_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
+                                    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+                                })
+                                .on_selection_end(|event| {
+                                    TAPPED_SELECTION_END_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
+                                    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+                                })
                                 .render(cx),
                         )
                         .child(
@@ -332,6 +422,19 @@ pub fn render(router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
                                     install_keyboard_callback();
                                     gpui_mobile::show_keyboard_with_type(KeyboardType::EmailAddress);
                                 })
+                                .on_selection_start(|event| {
+                                    TAPPED_FIELD.with(|f| *f.borrow_mut() = Some(1));
+                                    TAPPED_SELECTION_START_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
+                                    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+                                })
+                                .on_selection_move(|event| {
+                                    TAPPED_SELECTION_MOVE_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
+                                    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+                                })
+                                .on_selection_end(|event| {
+                                    TAPPED_SELECTION_END_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
+                                    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+                                })
                                 .render(cx),
                         )
                         .child(
@@ -349,6 +452,19 @@ pub fn render(router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
                                     TAPPED_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
                                     install_keyboard_callback();
                                     gpui_mobile::show_keyboard_with_type(KeyboardType::Phone);
+                                })
+                                .on_selection_start(|event| {
+                                    TAPPED_FIELD.with(|f| *f.borrow_mut() = Some(2));
+                                    TAPPED_SELECTION_START_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
+                                    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+                                })
+                                .on_selection_move(|event| {
+                                    TAPPED_SELECTION_MOVE_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
+                                    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+                                })
+                                .on_selection_end(|event| {
+                                    TAPPED_SELECTION_END_X.with(|x| *x.borrow_mut() = Some(event.position.x.as_f32()));
+                                    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
                                 })
                                 .render(cx),
                         ),

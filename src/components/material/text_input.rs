@@ -4,7 +4,7 @@
 //! receives text input, and displays the current value with a cursor that
 //! can be positioned within the text.
 
-use gpui::{div, prelude::*, px, rgb, ElementId, MouseButton, MouseDownEvent};
+use gpui::{div, prelude::*, px, rgb, ElementId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
 
 use super::theme::MaterialTheme;
 
@@ -55,6 +55,12 @@ pub struct TextInput<V: 'static> {
     on_tap: Option<Box<dyn Fn(&mut V, &MouseDownEvent, &mut gpui::Window, &mut gpui::Context<V>)>>,
     /// Simple tap callback that receives the MouseDownEvent for tap position.
     on_tap_simple: Option<std::rc::Rc<dyn Fn(&MouseDownEvent)>>,
+    /// Callback for when a Monokakido-style selection starts.
+    on_selection_start: Option<std::rc::Rc<dyn Fn(&MouseDownEvent)>>,
+    /// Callback for when a Monokakido-style selection moves.
+    on_selection_move: Option<std::rc::Rc<dyn Fn(&MouseMoveEvent)>>,
+    /// Callback for when a Monokakido-style selection ends.
+    on_selection_end: Option<std::rc::Rc<dyn Fn(&MouseUpEvent)>>,
 }
 
 impl<V: 'static> TextInput<V> {
@@ -74,6 +80,9 @@ impl<V: 'static> TextInput<V> {
             selection: None,
             on_tap: None,
             on_tap_simple: None,
+            on_selection_start: None,
+            on_selection_move: None,
+            on_selection_end: None,
         }
     }
 
@@ -151,6 +160,24 @@ impl<V: 'static> TextInput<V> {
         self
     }
 
+    /// Set a callback for the start of Monokakido-style selection.
+    pub fn on_selection_start(mut self, handler: impl Fn(&MouseDownEvent) + 'static) -> Self {
+        self.on_selection_start = Some(std::rc::Rc::new(handler));
+        self
+    }
+
+    /// Set a callback for the movement of Monokakido-style selection.
+    pub fn on_selection_move(mut self, handler: impl Fn(&MouseMoveEvent) + 'static) -> Self {
+        self.on_selection_move = Some(std::rc::Rc::new(handler));
+        self
+    }
+
+    /// Set a callback for the end of Monokakido-style selection.
+    pub fn on_selection_end(mut self, handler: impl Fn(&MouseUpEvent) + 'static) -> Self {
+        self.on_selection_end = Some(std::rc::Rc::new(handler));
+        self
+    }
+
     /// Build the element. Must be called with a context to wire up event handlers.
     pub fn render(mut self, cx: &mut gpui::Context<V>) -> impl IntoElement {
         let t = self.theme;
@@ -211,7 +238,7 @@ impl<V: 'static> TextInput<V> {
         let focused = self.focused;
         let placeholder = self.placeholder;
 
-        let text_row = if has_value && focused {
+        let text_row = if has_value && (focused || selection.is_some()) {
             Self::render_text_with_cursor_static(&value, cursor_pos, selection, text_color, t)
         } else {
             // No value or not focused — show placeholder or plain text
@@ -258,6 +285,40 @@ impl<V: 'static> TextInput<V> {
             );
         }
 
+        // Monokakido selection start
+        if let Some(handler) = self.on_selection_start {
+            let handler_clone = handler.clone();
+            input_box = input_box.on_mouse_down(
+                MouseButton::Right,
+                move |event: &MouseDownEvent, _window: &mut gpui::Window, _cx: &mut gpui::App| {
+                    (handler_clone)(event);
+                },
+            );
+        }
+
+        // Monokakido selection move
+        if let Some(handler) = self.on_selection_move {
+            let handler_clone = handler.clone();
+            input_box = input_box.on_mouse_move(
+                move |event: &MouseMoveEvent, _window: &mut gpui::Window, _cx: &mut gpui::App| {
+                    if event.pressed_button == Some(MouseButton::Right) {
+                        (handler_clone)(event);
+                    }
+                },
+            );
+        }
+
+        // Monokakido selection end
+        if let Some(handler) = self.on_selection_end {
+            let handler_clone = handler.clone();
+            input_box = input_box.on_mouse_up(
+                MouseButton::Right,
+                move |event: &MouseUpEvent, _window: &mut gpui::Window, _cx: &mut gpui::App| {
+                    (handler_clone)(event);
+                },
+            );
+        }
+
         field = field.child(input_box);
 
         // Error text
@@ -286,17 +347,16 @@ impl<V: 'static> TextInput<V> {
     ) -> gpui::Div {
         let cursor_pos = cursor_position.min(value.len());
 
-        if let Some((sel_min, sel_max)) = selection {
-            // Clamp selection to text length
-            let sel_min = sel_min.min(value.len());
-            let sel_max = sel_max.min(value.len());
+        if let Some((sel_anchor, sel_cursor)) = selection {
+            let sel_min = sel_anchor.min(sel_cursor).min(value.len());
+            let sel_max = sel_anchor.max(sel_cursor).min(value.len());
 
             let before_sel = &value[..sel_min];
             let selected = &value[sel_min..sel_max];
             let after_sel = &value[sel_max..];
 
-            // Selection highlight color: blend primary at 30% with surface
-            let highlight_bg = blend_rgb(t.surface, t.primary, 0.3);
+            // Selection highlight color: Monokakido blue
+            let highlight_bg = 0x4285F4;
 
             let mut row = div()
                 .flex()
@@ -313,14 +373,15 @@ impl<V: 'static> TextInput<V> {
                 row = row.child(
                     div()
                         .bg(rgb(highlight_bg))
+                        .text_color(rgb(0xFFFFFF))
                         .rounded_sm()
                         .px(px(1.0))
                         .child(selected.to_string()),
                 );
+            } else {
+                // Empty selection but active — show a thin cursor-like bar
+                row = row.child(div().w(px(2.0)).h(px(16.0)).bg(rgb(highlight_bg)));
             }
-
-            // Cursor bar at selection edge
-            row = row.child(div().w(px(2.0)).h(px(16.0)).bg(rgb(t.primary)));
 
             if !after_sel.is_empty() {
                 row = row.child(div().child(after_sel.to_string()));
