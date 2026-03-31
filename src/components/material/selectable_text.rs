@@ -4,9 +4,8 @@
 
 use gpui::{
     div, px, rgb, IntoElement, MouseButton, ParentElement, Render, SharedString, Styled, Window, App,
-    InteractiveElement, Context as ViewContext, Font, FontWeight, FontStyle, TextStyle, TextRun,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Bounds, ElementId, canvas,
-    prelude::FluentBuilder,
+    InteractiveElement, Context as ViewContext, Pixels, Point, Bounds, ElementId, canvas,
+    prelude::FluentBuilder, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
 };
 
 use super::theme::{color, MaterialTheme};
@@ -16,7 +15,7 @@ pub struct SelectableTextView {
     theme: MaterialTheme,
     on_lookup: Option<std::rc::Rc<dyn Fn(&str, &mut App)>>,
     selection_index: Option<(usize, usize)>, // (start_byte, end_byte)
-    bounds: Bounds<Pixels>,
+    char_bounds: Vec<(usize, usize, Bounds<Pixels>)>,
 }
 
 impl SelectableTextView {
@@ -26,7 +25,7 @@ impl SelectableTextView {
             theme,
             on_lookup: None,
             selection_index: None,
-            bounds: Bounds::default(),
+            char_bounds: Vec::new(),
         }
     }
 
@@ -34,58 +33,13 @@ impl SelectableTextView {
         self.on_lookup = Some(std::rc::Rc::new(handler));
     }
 
-    pub fn index_for_position(&self, position: Point<Pixels>, window: &mut Window, _cx: &App) -> Option<(usize, usize)> {
-        if self.bounds.size.width == px(0.0) || self.text.is_empty() {
-            return None;
+    fn hit_test(&self, point: Point<Pixels>) -> Option<(usize, usize)> {
+        for (start, end, bounds) in &self.char_bounds {
+            if bounds.contains(&point) {
+                return Some((*start, *end));
+            }
         }
-
-        let local_x = position.x - self.bounds.origin.x;
-        
-        let text_style = TextStyle {
-            color: color(self.theme.on_surface),
-            font_size: px(18.0).into(),
-            ..Default::default()
-        };
-        
-        let font = Font {
-            family: text_style.font_family.clone(),
-            weight: FontWeight::NORMAL,
-            style: FontStyle::Normal,
-            features: Default::default(),
-            fallbacks: Default::default(),
-        };
-
-        let run = TextRun {
-            len: self.text.len(),
-            font,
-            color: text_style.color,
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-        };
-
-        // For wrapping text, we need to provide the width constraint
-        let lines = window.text_system().shape_line(
-            self.text.clone(),
-            px(18.0),
-            &[run],
-            Some(self.bounds.size.width),
-        );
-        
-        let byte_offset = lines.index_for_x(local_x)?;
-        
-        // Find UTF-8 character boundaries
-        let mut start = byte_offset;
-        while start > 0 && !self.text.is_char_boundary(start) {
-            start -= 1;
-        }
-        
-        let mut end = start + 1;
-        while end <= self.text.len() && !self.text.is_char_boundary(end) {
-            end += 1;
-        }
-
-        Some((start, end))
+        None
     }
 }
 
@@ -103,6 +57,8 @@ impl Render for SelectableTextView {
         };
 
         let entity = cx.entity().clone();
+        // Clear char bounds before re-rendering
+        self.char_bounds.clear();
 
         div()
             .id(ElementId::Name(SharedString::from(format!("selectable-root-{}", text_hash))))
@@ -111,35 +67,20 @@ impl Render for SelectableTextView {
             .flex_wrap()
             .items_center()
             .w_full()
-            .min_h(px(24.0)) 
-            .child(
-                canvas(
-                    move |_style, window, cx| {
-                        window.request_layout(gpui::Style::default(), None, cx)
-                    },
-                    move |bounds, _layout_id, _window, cx| {
-                        let _ = entity.update(cx, |this, _| {
-                            if (this.bounds.size.width - bounds.size.width).abs() > px(1.0) || 
-                               (this.bounds.origin.x - bounds.origin.x).abs() > px(1.0) {
-                                this.bounds = bounds;
-                            }
-                        });
-                    }
-                )
-                .absolute()
-                .size_full()
-            )
-            .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                this.selection_index = this.index_for_position(event.position, window, cx);
+            .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                this.selection_index = this.hit_test(event.position);
                 cx.notify();
             }))
-            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
-                if event.pressed_button == Some(MouseButton::Right) && this.selection_index.is_some() {
-                    this.selection_index = this.index_for_position(event.position, window, cx);
-                    cx.notify();
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                if event.pressed_button == Some(MouseButton::Right) {
+                    let new_index = this.hit_test(event.position);
+                    if new_index != this.selection_index {
+                        this.selection_index = new_index;
+                        cx.notify();
+                    }
                 }
             }))
-            .on_mouse_up(MouseButton::Right, cx.listener(|this, _event: &MouseUpEvent, _window, cx| {
+            .on_mouse_up(MouseButton::Right, cx.listener(|this, _event: &MouseUpEvent, _, cx| {
                 if let Some((start, end)) = this.selection_index {
                     if let Some(on_lookup) = &this.on_lookup {
                         if let Some(char_str) = this.text.get(start..end) {
@@ -154,7 +95,31 @@ impl Render for SelectableTextView {
                 let is_selected = self.selection_index.map_or(false, |(start, end)| idx >= start && idx < end);
                 let char_str = c.to_string();
                 
+                // Find UTF-8 character boundaries for this specific character
+                let start = idx;
+                let mut end = start + 1;
+                while end <= self.text.len() && !self.text.is_char_boundary(end) {
+                    end += 1;
+                }
+
+                let entity = entity.clone();
                 div()
+                    .id(ElementId::Name(SharedString::from(format!("char-{}-{}", text_hash, idx))))
+                    .relative()
+                    .child(
+                        canvas(
+                            move |_style, window, cx| {
+                                window.request_layout(gpui::Style::default(), None, cx)
+                            },
+                            move |bounds, _layout_id, _window, cx| {
+                                let _ = entity.update(cx, |this, _| {
+                                    this.char_bounds.push((start, end, bounds));
+                                });
+                            }
+                        )
+                        .absolute()
+                        .size_full()
+                    )
                     .when(is_selected, |this| this.bg(highlight_bg).text_color(rgb(0xFFFFFF)).rounded_sm())
                     .when(!is_selected, |this| this.text_color(text_color))
                     .child(char_str)
