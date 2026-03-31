@@ -14,7 +14,10 @@ pub struct SelectableTextView {
     text: SharedString,
     theme: MaterialTheme,
     on_lookup: Option<std::rc::Rc<dyn Fn(&str, &mut App)>>,
-    selection_index: Option<(usize, usize)>, // (start_byte, end_byte)
+    /// The final resolved selection range (start_byte, end_byte)
+    selection_range: Option<(usize, usize)>,
+    /// The starting character range where the long-press began
+    anchor_range: Option<(usize, usize)>,
     char_bounds: Vec<(usize, usize, Bounds<Pixels>)>,
 }
 
@@ -24,7 +27,8 @@ impl SelectableTextView {
             text: text.into(),
             theme,
             on_lookup: None,
-            selection_index: None,
+            selection_range: None,
+            anchor_range: None,
             char_bounds: Vec::new(),
         }
     }
@@ -68,31 +72,42 @@ impl Render for SelectableTextView {
             .items_center()
             .w_full()
             .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                this.selection_index = this.hit_test(event.position);
+                let hit = this.hit_test(event.position);
+                this.anchor_range = hit;
+                this.selection_range = hit;
                 cx.notify();
             }))
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 if event.pressed_button == Some(MouseButton::Right) {
-                    let new_index = this.hit_test(event.position);
-                    if new_index != this.selection_index {
-                        this.selection_index = new_index;
-                        cx.notify();
+                    if let Some(anchor) = this.anchor_range {
+                        if let Some(current) = this.hit_test(event.position) {
+                            // Calculate the union of the anchor and current character
+                            let start = anchor.0.min(current.0);
+                            let end = anchor.1.max(current.1);
+                            let new_range = Some((start, end));
+                            
+                            if this.selection_range != new_range {
+                                this.selection_range = new_range;
+                                cx.notify();
+                            }
+                        }
                     }
                 }
             }))
             .on_mouse_up(MouseButton::Right, cx.listener(|this, _event: &MouseUpEvent, _, cx| {
-                if let Some((start, end)) = this.selection_index {
+                if let Some((start, end)) = this.selection_range {
                     if let Some(on_lookup) = &this.on_lookup {
                         if let Some(char_str) = this.text.get(start..end) {
                             (on_lookup)(char_str, cx);
                         }
                     }
                 }
-                this.selection_index = None;
+                this.selection_range = None;
+                this.anchor_range = None;
                 cx.notify();
             }))
             .children(self.text.char_indices().map(|(idx, c)| {
-                let is_selected = self.selection_index.map_or(false, |(start, end)| idx >= start && idx < end);
+                let is_selected = self.selection_range.map_or(false, |(start, end)| idx >= start && idx < end);
                 let char_str = c.to_string();
                 
                 // Find UTF-8 character boundaries for this specific character
