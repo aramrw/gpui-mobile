@@ -18,6 +18,11 @@ impl ZoomHeader {
     pub fn new(theme: MaterialTheme) -> Self {
         Self { theme }
     }
+
+    pub fn set_theme(&mut self, theme: MaterialTheme, cx: &mut ViewContext<Self>) {
+        self.theme = theme;
+        cx.notify();
+    }
 }
 
 impl Render for ZoomHeader {
@@ -41,7 +46,8 @@ impl Render for ZoomHeader {
                 .top_0()
                 .left_0()
                 .right_0()
-                .h(px(64.0))
+                .h(px(108.0)) // Increased height to cover notch + content
+                .pt(px(44.0))  // Padding to move content below notch
                 .bg(bg_color)
                 .border_b_1()
                 .border_color(color(self.theme.outline_variant))

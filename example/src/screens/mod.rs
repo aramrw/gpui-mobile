@@ -396,6 +396,12 @@ impl Render for Router {
 
         let show_tab_bar = self.current_screen.is_tab_root();
         let theme = gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
+        
+        // Sync zoom header theme
+        let _ = self.zoom_header.update(cx, |this, cx| {
+            this.set_theme(theme, cx);
+        });
+
         let bg_color = theme.surface;
         let text_color = theme.on_surface;
         let safe_top = self.safe_area.top;
