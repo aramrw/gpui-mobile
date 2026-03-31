@@ -22,6 +22,8 @@ pub struct SelectableTextView {
     char_bounds: Vec<(usize, usize, Bounds<Pixels>)>,
     /// Root bounds of the component (for fast hit-testing)
     root_bounds: Bounds<Pixels>,
+    /// Position of the initial touch that hasn't been resolved to an anchor yet.
+    pending_anchor_position: Option<Point<Pixels>>,
 }
 
 impl SelectableTextView {
@@ -34,6 +36,7 @@ impl SelectableTextView {
             anchor_range: None,
             char_bounds: Vec::new(),
             root_bounds: Bounds::default(),
+            pending_anchor_position: None,
         }
     }
 
@@ -48,44 +51,6 @@ impl SelectableTextView {
             }
         }
         None
-    }
-
-    /// Fast hit-test using GPUI's text system, used for the initial touch when in "Idle Mode".
-    fn fast_hit_test(&self, position: Point<Pixels>, window: &mut Window) -> Option<(usize, usize)> {
-        if self.root_bounds.size.width == px(0.0) {
-            return None;
-        }
-
-        let local_x = position.x - self.root_bounds.origin.x;
-
-        let run = gpui::TextRun {
-            len: self.text.len(),
-            font: gpui::Font::default(),
-            color: color(self.theme.on_surface),
-            ..Default::default()
-        };
-
-        let width = self.root_bounds.size.width;
-        let lines = window.text_system().shape_line(
-            self.text.clone(),
-            px(18.0),
-            &[run],
-            Some(width),
-        );
-
-        let idx = lines.index_for_x(local_x)?;
-        
-        // Find UTF-8 character boundaries
-        let mut start = idx;
-        while start > 0 && !self.text.is_char_boundary(start) {
-            start -= 1;
-        }
-        let mut end = start + 1;
-        while end <= self.text.len() && !self.text.is_char_boundary(end) {
-            end += 1;
-        }
-
-        Some((start, end))
     }
 
     /// Expand a character range to word boundaries if it's not CJK.
@@ -187,26 +152,38 @@ impl Render for SelectableTextView {
             .flex_wrap()
             .items_center()
             .w_full()
-            .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                // If we aren't in "Interaction Mode" yet, use the fast hit-test
-                let hit = if this.selection_range.is_none() {
-                    this.fast_hit_test(event.position, window)
+            .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, _window, cx| {
+                if this.selection_range.is_none() {
+                    // Start Interaction Mode by setting a dummy range
+                    // and store the position to resolve in the next frame.
+                    this.selection_range = Some((0, 0));
+                    this.pending_anchor_position = Some(event.position);
                 } else {
-                    this.hit_test(event.position)
-                };
-
-                if let Some(hit) = hit {
-                    let snapped = this.expand_to_word_boundaries(hit);
-                    this.anchor_range = Some(snapped);
-                    this.selection_range = Some(snapped);
-                    this.update_global_hover(snapped, hit.0, cx);
-                    cx.notify();
+                    // Already in Interaction Mode (e.g. second tap while hover active)
+                    if let Some(hit) = this.hit_test(event.position) {
+                        let snapped = this.expand_to_word_boundaries(hit);
+                        this.anchor_range = Some(snapped);
+                        this.selection_range = Some(snapped);
+                        this.update_global_hover(snapped, hit.0, cx);
+                    }
                 }
+                cx.notify();
             }))
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 if event.pressed_button == Some(MouseButton::Right) {
+                    // Resolve pending anchor if it exists and bounds are now ready
+                    if let Some(pending_pos) = this.pending_anchor_position {
+                        if let Some(hit) = this.hit_test(pending_pos) {
+                            let snapped = this.expand_to_word_boundaries(hit);
+                            this.anchor_range = Some(snapped);
+                            this.selection_range = Some(snapped);
+                            this.pending_anchor_position = None;
+                            this.update_global_hover(snapped, hit.0, cx);
+                            cx.notify();
+                        }
+                    }
+
                     if let Some(anchor) = this.anchor_range {
-                        // Use precise hit-test (Interaction Mode is guaranteed here)
                         if let Some(current) = this.hit_test(event.position) {
                             let snapped = this.expand_to_word_boundaries(current);
                             
@@ -215,9 +192,11 @@ impl Render for SelectableTextView {
                             let end = anchor.1.max(snapped.1);
                             let new_range = Some((start, end));
                             
-                            this.selection_range = new_range;
-                            this.update_global_hover((start, end), current.0, cx);
-                            cx.notify();
+                            if this.selection_range != new_range {
+                                this.selection_range = new_range;
+                                this.update_global_hover((start, end), current.0, cx);
+                                cx.notify();
+                            }
                         }
                     }
                 }
@@ -232,20 +211,21 @@ impl Render for SelectableTextView {
                 }
                 this.selection_range = None;
                 this.anchor_range = None;
-                this.char_bounds.clear(); // IMMEDIATELY CLEAR
+                this.pending_anchor_position = None;
+                this.char_bounds.clear(); 
                 cx.remove_global::<GlobalHoverState>();
                 cx.notify();
             }))
             .children(match self.selection_range {
-                Some(range) => {
-                    // "Interaction Mode" - Precise, character-by-character rendering
+                Some(_range) => {
+                    // Interaction Mode - Precise, character-by-character rendering
+                    let selection = self.selection_range.unwrap_or((0, 0));
                     self.text.char_indices().map(|(idx, c)| {
                         if c == '\n' {
-                            // Force a line break in the flex container
                             return div().w_full().h_0().into_any_element();
                         }
 
-                        let is_selected = idx >= range.0 && idx < range.1;
+                        let is_selected = idx >= selection.0 && idx < selection.1;
                         let char_str = c.to_string();
                         
                         let start = idx;
@@ -279,9 +259,10 @@ impl Render for SelectableTextView {
                     }).collect::<Vec<_>>()
                 }
                 None => {
-                    // "Idle Mode" - Fast, single-div rendering
+                    // Idle Mode - Single-div rendering with wrapping and newline support
                     vec![div()
                         .relative()
+                        .w_full() // Crucial for wrapping
                         .child(
                             canvas(
                                 move |_style, window, cx| {
