@@ -6,6 +6,7 @@ use gpui::{
     div, px, rgb, IntoElement, MouseButton, ParentElement, Render, SharedString, Styled, Window, App,
     InteractiveElement, Context as ViewContext, Font, FontWeight, FontStyle, TextStyle, TextRun,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Bounds, ElementId, canvas,
+    prelude::FluentBuilder,
 };
 
 use super::theme::{color, MaterialTheme};
@@ -63,11 +64,12 @@ impl SelectableTextView {
             strikethrough: None,
         };
 
+        // For wrapping text, we need to provide the width constraint
         let lines = window.text_system().shape_line(
             self.text.clone(),
             px(18.0),
             &[run],
-            None,
+            Some(self.bounds.size.width),
         );
         
         let byte_offset = lines.index_for_x(local_x)?;
@@ -117,7 +119,8 @@ impl Render for SelectableTextView {
                     },
                     move |bounds, _layout_id, _window, cx| {
                         let _ = entity.update(cx, |this, _| {
-                            if this.bounds != bounds {
+                            if (this.bounds.size.width - bounds.size.width).abs() > px(1.0) || 
+                               (this.bounds.origin.x - bounds.origin.x).abs() > px(1.0) {
                                 this.bounds = bounds;
                             }
                         });
@@ -147,30 +150,14 @@ impl Render for SelectableTextView {
                 this.selection_index = None;
                 cx.notify();
             }))
-            .children(if let Some((start, end)) = self.selection_index {
-                let before = &self.text[..start];
-                let selected = &self.text[start..end];
-                let after = &self.text[end..];
-
-                let mut children = Vec::new();
-                if !before.is_empty() {
-                    children.push(div().text_color(text_color).child(before.to_string()).into_any_element());
-                }
-                children.push(
-                    div()
-                        .bg(highlight_bg)
-                        .text_color(rgb(0xFFFFFF))
-                        .rounded_sm()
-                        .px(px(1.0))
-                        .child(selected.to_string())
-                        .into_any_element()
-                );
-                if !after.is_empty() {
-                    children.push(div().text_color(text_color).child(after.to_string()).into_any_element());
-                }
-                children
-            } else {
-                vec![div().text_color(text_color).child(self.text.clone()).into_any_element()]
-            })
+            .children(self.text.char_indices().map(|(idx, c)| {
+                let is_selected = self.selection_index.map_or(false, |(start, end)| idx >= start && idx < end);
+                let char_str = c.to_string();
+                
+                div()
+                    .when(is_selected, |this| this.bg(highlight_bg).text_color(rgb(0xFFFFFF)).rounded_sm())
+                    .when(!is_selected, |this| this.text_color(text_color))
+                    .child(char_str)
+            }))
     }
 }
