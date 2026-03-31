@@ -154,10 +154,13 @@ impl Render for SelectableTextView {
             .w_full()
             .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, _window, cx| {
                 if this.selection_range.is_none() {
-                    // Start Interaction Mode by setting a dummy range
-                    // and store the position to resolve in the next frame.
-                    this.selection_range = Some((0, 0));
-                    this.pending_anchor_position = Some(event.position);
+                    // ONLY start interaction if we are within the component's root bounds
+                    if this.root_bounds.contains(&event.position) {
+                        // Start Interaction Mode by setting a dummy range
+                        // and store the position to resolve in the next frame.
+                        this.selection_range = Some((0, 0));
+                        this.pending_anchor_position = Some(event.position);
+                    }
                 } else {
                     // Already in Interaction Mode (e.g. second tap while hover active)
                     if let Some(hit) = this.hit_test(event.position) {
@@ -180,6 +183,10 @@ impl Render for SelectableTextView {
                             this.pending_anchor_position = None;
                             this.update_global_hover(snapped, hit.0, cx);
                             cx.notify();
+                        } else {
+                            // If we still can't hit anything even in Interaction Mode (empty space),
+                            // we might want to stay in selection mode but without an anchor,
+                            // or just keep waiting for a hit.
                         }
                     }
 
@@ -204,8 +211,11 @@ impl Render for SelectableTextView {
             .on_mouse_up(MouseButton::Right, cx.listener(|this, _event: &MouseUpEvent, _, cx| {
                 if let Some((start, end)) = this.selection_range {
                     if let Some(on_lookup) = &this.on_lookup {
-                        if let Some(char_str) = this.text.get(start..end) {
-                            (on_lookup)(char_str, cx);
+                        // Only lookup if the selection has actually grown beyond the dummy state
+                        if start != end {
+                            if let Some(char_str) = this.text.get(start..end) {
+                                (on_lookup)(char_str, cx);
+                            }
                         }
                     }
                 }
@@ -213,7 +223,12 @@ impl Render for SelectableTextView {
                 this.anchor_range = None;
                 this.pending_anchor_position = None;
                 this.char_bounds.clear(); 
-                cx.remove_global::<GlobalHoverState>();
+                
+                // SAFE REMOVAL: Only remove if it exists to avoid GPUI panic
+                if cx.try_global::<GlobalHoverState>().is_some() {
+                    cx.remove_global::<GlobalHoverState>();
+                }
+                
                 cx.notify();
             }))
             .children(match self.selection_range {
