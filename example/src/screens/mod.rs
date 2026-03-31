@@ -201,9 +201,13 @@ pub struct Router {
     // ── Yomichan state ───────────────────────────────────────────────────
     pub search_state: Entity<search::SearchState>,
     pub dictionaries_state: Entity<dictionaries::DictionariesState>,
-    pub settings_state: Entity<settings::SettingsState>,
+    settings_state: Entity<settings::SettingsState>,
+
+    /// Monokakido-style zoom header.
+    zoom_header: Entity<gpui_mobile::components::material::ZoomHeader>,
 
     // ── Demo view state ──────────────────────────────────────────────────
+
     /// The animation playground demo (lazily created when the screen is visited).
     animation_playground: Option<AnimationPlayground>,
     /// The shader showcase demo (lazily created when the screen is visited).
@@ -238,6 +242,9 @@ impl Router {
         let search_state = cx.new(|cx| search::SearchState::new(window, cx));
         let dictionaries_state = cx.new(|cx| dictionaries::DictionariesState::new(window, cx));
         let settings_state = cx.new(|cx| settings::SettingsState::new(window, cx));
+        let zoom_header = cx.new(|_cx| {
+            gpui_mobile::components::material::ZoomHeader::new(MaterialTheme::from_appearance(true))
+        });
 
         Self {
             current_screen: screen,
@@ -250,6 +257,7 @@ impl Router {
             search_state,
             dictionaries_state,
             settings_state,
+            zoom_header,
             animation_playground: None,
             shader_showcase: None,
         }
@@ -411,6 +419,8 @@ impl Render for Router {
             .when(safe_top > 0.0, |d| {
                 d.child(div().w_full().h(px(safe_top)).bg(rgb(top_color)))
             })
+            // ── Monokakido Zoom Header ───────────────────────────────────
+            .child(self.zoom_header.clone())
             // ── Top navigation bar ───────────────────────────────────────
             .child(self.render_nav_bar(cx))
             // ── Screen content ───────────────────────────────────────────

@@ -143,6 +143,7 @@ pub mod list_tile;
 
 pub mod bottom_sheet;
 pub mod snackbar;
+pub mod zoom_header;
 
 // ── Legacy modules (deprecated — kept for backward compatibility) ─────────────
 pub mod buttons;
@@ -211,6 +212,7 @@ pub use progress_indicator::{CircularProgressIndicator, LinearProgressIndicator}
 pub use search_bar::{SearchBar, SearchView};
 pub use selectable_text::SelectableTextView;
 pub use snackbar::snackbar;
+pub use zoom_header::ZoomHeader;
 pub use text_field::TextField;
 pub use text_input::TextInput;
 

@@ -9,6 +9,7 @@ use gpui::{
 };
 
 use super::theme::{color, MaterialTheme};
+use crate::GlobalHoverState;
 
 pub struct SelectableTextView {
     text: SharedString,
@@ -45,6 +46,69 @@ impl SelectableTextView {
         }
         None
     }
+
+    /// Expand a character range to word boundaries if it's not CJK.
+    fn expand_to_word_boundaries(&self, range: (usize, usize)) -> (usize, usize) {
+        let (start, end) = range;
+        let text = self.text.as_ref();
+        
+        // If the character is CJK, don't expand
+        if let Some(c) = text[start..end].chars().next() {
+            if is_cjk(c) {
+                return range;
+            }
+        }
+
+        // Expand backwards to find word start
+        let mut word_start = start;
+        for (idx, c) in text[..start].char_indices().rev() {
+            if !c.is_alphanumeric() {
+                break;
+            }
+            word_start = idx;
+        }
+
+        // Expand forwards to find word end
+        let mut word_end = end;
+        for (idx, c) in text[end..].char_indices() {
+            if !c.is_alphanumeric() {
+                break;
+            }
+            word_end = end + idx + c.len_utf8();
+        }
+
+        (word_start, word_end)
+    }
+
+    fn update_global_hover(&self, range: (usize, usize), cx: &mut ViewContext<Self>) {
+        let (start, end) = range;
+        let text = self.text.as_ref();
+        
+        // Extract context (approx 10 chars before/after)
+        let context_before_start = text[..start].char_indices().rev().take(10).last().map(|(idx, _)| idx).unwrap_or(0);
+        let context_after_end = text[end..].char_indices().take(10).last().map(|(idx, c)| end + idx + c.len_utf8()).unwrap_or(text.len());
+
+        let context_before = SharedString::from(text[context_before_start..start].to_string());
+        let context_after = SharedString::from(text[end..context_after_end].to_string());
+        let hovered_text = SharedString::from(text[start..end].to_string());
+
+        cx.set_global(GlobalHoverState {
+            text: hovered_text,
+            context_before,
+            context_after,
+            range,
+        });
+    }
+}
+
+fn is_cjk(c: char) -> bool {
+    matches!(c, 
+        '\u{3040}'..='\u{309F}' | // Hiragana
+        '\u{30A0}'..='\u{30FF}' | // Katakana
+        '\u{4E00}'..='\u{9FFF}' | // Kanji
+        '\u{AC00}'..='\u{D7AF}' | // Hangul
+        '\u{FF00}'..='\u{FFEF}'   // Full-width forms
+    )
 }
 
 impl Render for SelectableTextView {
@@ -72,22 +136,28 @@ impl Render for SelectableTextView {
             .items_center()
             .w_full()
             .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                let hit = this.hit_test(event.position);
-                this.anchor_range = hit;
-                this.selection_range = hit;
-                cx.notify();
+                if let Some(hit) = this.hit_test(event.position) {
+                    let snapped = this.expand_to_word_boundaries(hit);
+                    this.anchor_range = Some(snapped);
+                    this.selection_range = Some(snapped);
+                    this.update_global_hover(snapped, cx);
+                    cx.notify();
+                }
             }))
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 if event.pressed_button == Some(MouseButton::Right) {
                     if let Some(anchor) = this.anchor_range {
                         if let Some(current) = this.hit_test(event.position) {
-                            // Calculate the union of the anchor and current character
-                            let start = anchor.0.min(current.0);
-                            let end = anchor.1.max(current.1);
+                            let snapped = this.expand_to_word_boundaries(current);
+                            
+                            // Calculate the union of the anchor word and current word
+                            let start = anchor.0.min(snapped.0);
+                            let end = anchor.1.max(snapped.1);
                             let new_range = Some((start, end));
                             
                             if this.selection_range != new_range {
                                 this.selection_range = new_range;
+                                this.update_global_hover((start, end), cx);
                                 cx.notify();
                             }
                         }
@@ -104,6 +174,7 @@ impl Render for SelectableTextView {
                 }
                 this.selection_range = None;
                 this.anchor_range = None;
+                cx.remove_global::<GlobalHoverState>();
                 cx.notify();
             }))
             .children(self.text.char_indices().map(|(idx, c)| {

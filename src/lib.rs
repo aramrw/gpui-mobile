@@ -77,6 +77,7 @@ pub mod packages;
 pub mod platform_view;
 pub mod target_platform;
 
+use gpui::SharedString;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -90,6 +91,16 @@ pub struct GlobalSelection {
     /// Whether a selection is actively being made.
     pub active: bool,
 }
+
+/// Global hover state for the zoom drop-down.
+pub struct GlobalHoverState {
+    pub text: SharedString,
+    pub context_before: SharedString,
+    pub context_after: SharedString,
+    pub range: (usize, usize),
+}
+
+impl gpui::Global for GlobalHoverState {}
 
 thread_local! {
     pub static GLOBAL_SELECTION: RefCell<GlobalSelection> = RefCell::new(GlobalSelection::default());
