@@ -46,23 +46,24 @@ impl Render for ZoomHeader {
                 .top_0()
                 .left_0()
                 .right_0()
-                .h(px(108.0)) // Increased height to cover notch + content
-                .pt(px(44.0))  // Padding to move content below notch
+                .h(px(108.0)) 
                 .bg(bg_color)
+                .overflow_hidden()
                 .border_b_1()
                 .border_color(color(self.theme.outline_variant))
                 .flex()
                 .flex_row()
                 .flex_nowrap()
-                .items_center()
+                .items_end() // Align content to the bottom of the bar
                 .justify_center()
                 .px_4()
+                .pb_2() // Bottom padding for better spacing
                 .child(
                     div()
                         .flex()
                         .flex_row()
                         .flex_nowrap()
-                        .items_center()
+                        .items_baseline() // USE BASELINE for consistent text height
                         .text_xl()
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child(

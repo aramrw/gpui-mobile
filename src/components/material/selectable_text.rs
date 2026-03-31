@@ -84,18 +84,30 @@ impl SelectableTextView {
         let (start, end) = range;
         let text = self.text.as_ref();
         
-        // Extract context (approx 10 chars before/after)
-        let context_before_start = text[..start].char_indices().rev().take(10).last().map(|(idx, _)| idx).unwrap_or(0);
-        let context_after_end = text[end..].char_indices().take(10).last().map(|(idx, c)| end + idx + c.len_utf8()).unwrap_or(text.len());
+        // The "active" point is where the finger is (the 'end' of the selection during a drag)
+        let active_idx = end;
 
-        let context_before = SharedString::from(text[context_before_start..start].to_string());
-        let context_after = SharedString::from(text[end..context_after_end].to_string());
-        let hovered_text = SharedString::from(text[start..end].to_string());
+        // Extract a window of the SELECTED text (max 10 chars) ending at the finger
+        let selected_text_start = text[start..end].char_indices().rev().take(10).last().map(|(idx, _)| start + idx).unwrap_or(start);
+        let mut hovered_text = text[selected_text_start..end].to_string();
+        if selected_text_start > start {
+            hovered_text = format!("...{}", hovered_text);
+        }
+
+        // Extract context around the active point
+        // 5 chars before the selection start (or before the window start)
+        let before_window = selected_text_start;
+        let context_before_start = text[..before_window].char_indices().rev().take(5).last().map(|(idx, _)| idx).unwrap_or(0);
+        let context_before = text[context_before_start..before_window].to_string();
+
+        // 5 chars after the finger
+        let context_after_end = text[end..].char_indices().take(5).last().map(|(idx, c)| end + idx + c.len_utf8()).unwrap_or(text.len());
+        let context_after = text[end..context_after_end].to_string();
 
         cx.set_global(GlobalHoverState {
-            text: hovered_text,
-            context_before,
-            context_after,
+            text: SharedString::from(hovered_text),
+            context_before: SharedString::from(context_before),
+            context_after: SharedString::from(context_after),
             range,
         });
     }
