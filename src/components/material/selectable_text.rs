@@ -20,6 +20,8 @@ pub struct SelectableTextView {
     /// The starting character range where the long-press began
     anchor_range: Option<(usize, usize)>,
     char_bounds: Vec<(usize, usize, Bounds<Pixels>)>,
+    /// Root bounds of the component (for fast hit-testing)
+    root_bounds: Bounds<Pixels>,
 }
 
 impl SelectableTextView {
@@ -31,6 +33,7 @@ impl SelectableTextView {
             selection_range: None,
             anchor_range: None,
             char_bounds: Vec::new(),
+            root_bounds: Bounds::default(),
         }
     }
 
@@ -47,12 +50,50 @@ impl SelectableTextView {
         None
     }
 
+    /// Fast hit-test using GPUI's text system, used for the initial touch when in "Idle Mode".
+    fn fast_hit_test(&self, position: Point<Pixels>, window: &mut Window) -> Option<(usize, usize)> {
+        if self.root_bounds.size.width == px(0.0) {
+            return None;
+        }
+
+        let local_x = position.x - self.root_bounds.origin.x;
+
+        let run = gpui::TextRun {
+            len: self.text.len(),
+            font: gpui::Font::default(),
+            color: color(self.theme.on_surface),
+            ..Default::default()
+        };
+
+        let width = self.root_bounds.size.width;
+        let lines = window.text_system().shape_line(
+            self.text.clone(),
+            px(18.0),
+            &[run],
+            Some(width),
+        );
+
+        let idx = lines.index_for_x(local_x)?;
+        
+        // Find UTF-8 character boundaries
+        let mut start = idx;
+        while start > 0 && !self.text.is_char_boundary(start) {
+            start -= 1;
+        }
+        let mut end = start + 1;
+        while end <= self.text.len() && !self.text.is_char_boundary(end) {
+            end += 1;
+        }
+
+        Some((start, end))
+    }
+
     /// Expand a character range to word boundaries if it's not CJK.
     fn expand_to_word_boundaries(&self, range: (usize, usize)) -> (usize, usize) {
         let (start, end) = range;
         let text = self.text.as_ref();
         
-        // If the character is CJK, don't expand
+        // If the character is CJK (including brackets/punctuation), don't expand
         if let Some(c) = text[start..end].chars().next() {
             if is_cjk(c) {
                 return range;
@@ -62,7 +103,8 @@ impl SelectableTextView {
         // Expand backwards to find word start
         let mut word_start = start;
         for (idx, c) in text[..start].char_indices().rev() {
-            if !c.is_alphanumeric() {
+            // Stop at CJK, whitespace, or any non-alphanumeric character
+            if is_cjk(c) || !c.is_alphanumeric() {
                 break;
             }
             word_start = idx;
@@ -71,7 +113,8 @@ impl SelectableTextView {
         // Expand forwards to find word end
         let mut word_end = end;
         for (idx, c) in text[end..].char_indices() {
-            if !c.is_alphanumeric() {
+            // Stop at CJK, whitespace, or any non-alphanumeric character
+            if is_cjk(c) || !c.is_alphanumeric() {
                 break;
             }
             word_end = end + idx + c.len_utf8();
@@ -111,6 +154,7 @@ impl SelectableTextView {
 
 fn is_cjk(c: char) -> bool {
     matches!(c, 
+        '\u{3000}'..='\u{303F}' | // CJK Symbols and Punctuation (Brackets, etc.)
         '\u{3040}'..='\u{309F}' | // Hiragana
         '\u{30A0}'..='\u{30FF}' | // Katakana
         '\u{4E00}'..='\u{9FFF}' | // Kanji
@@ -143,8 +187,15 @@ impl Render for SelectableTextView {
             .flex_wrap()
             .items_center()
             .w_full()
-            .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                if let Some(hit) = this.hit_test(event.position) {
+            .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                // If we aren't in "Interaction Mode" yet, use the fast hit-test
+                let hit = if this.selection_range.is_none() {
+                    this.fast_hit_test(event.position, window)
+                } else {
+                    this.hit_test(event.position)
+                };
+
+                if let Some(hit) = hit {
                     let snapped = this.expand_to_word_boundaries(hit);
                     this.anchor_range = Some(snapped);
                     this.selection_range = Some(snapped);
@@ -155,6 +206,7 @@ impl Render for SelectableTextView {
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 if event.pressed_button == Some(MouseButton::Right) {
                     if let Some(anchor) = this.anchor_range {
+                        // Use precise hit-test (Interaction Mode is guaranteed here)
                         if let Some(current) = this.hit_test(event.position) {
                             let snapped = this.expand_to_word_boundaries(current);
                             
@@ -180,41 +232,74 @@ impl Render for SelectableTextView {
                 }
                 this.selection_range = None;
                 this.anchor_range = None;
+                this.char_bounds.clear(); // IMMEDIATELY CLEAR
                 cx.remove_global::<GlobalHoverState>();
                 cx.notify();
             }))
-            .children(self.text.char_indices().map(|(idx, c)| {
-                let is_selected = self.selection_range.map_or(false, |(start, end)| idx >= start && idx < end);
-                let char_str = c.to_string();
-                
-                // Find UTF-8 character boundaries for this specific character
-                let start = idx;
-                let mut end = start + 1;
-                while end <= self.text.len() && !self.text.is_char_boundary(end) {
-                    end += 1;
-                }
+            .children(match self.selection_range {
+                Some(range) => {
+                    // "Interaction Mode" - Precise, character-by-character rendering
+                    self.text.char_indices().map(|(idx, c)| {
+                        if c == '\n' {
+                            // Force a line break in the flex container
+                            return div().w_full().h_0().into_any_element();
+                        }
 
-                let entity = entity.clone();
-                div()
-                    .id(ElementId::Name(SharedString::from(format!("char-{}-{}", text_hash, idx))))
-                    .relative()
-                    .child(
-                        canvas(
-                            move |_style, window, cx| {
-                                window.request_layout(gpui::Style::default(), None, cx)
-                            },
-                            move |bounds, _layout_id, _window, cx| {
-                                let _ = entity.update(cx, |this, _| {
-                                    this.char_bounds.push((start, end, bounds));
-                                });
-                            }
+                        let is_selected = idx >= range.0 && idx < range.1;
+                        let char_str = c.to_string();
+                        
+                        let start = idx;
+                        let mut end = start + 1;
+                        while end <= self.text.len() && !self.text.is_char_boundary(end) {
+                            end += 1;
+                        }
+
+                        let entity = entity.clone();
+                        div()
+                            .id(ElementId::Name(SharedString::from(format!("char-{}-{}", text_hash, idx))))
+                            .relative()
+                            .child(
+                                canvas(
+                                    move |_style, window, cx| {
+                                        window.request_layout(gpui::Style::default(), None, cx)
+                                    },
+                                    move |bounds, _layout_id, _window, cx| {
+                                        let _ = entity.update(cx, |this, _| {
+                                            this.char_bounds.push((start, end, bounds));
+                                        });
+                                    }
+                                )
+                                .absolute()
+                                .size_full()
+                            )
+                            .when(is_selected, |this| this.bg(highlight_bg).text_color(rgb(0xFFFFFF)).rounded_sm())
+                            .when(!is_selected, |this| this.text_color(text_color))
+                            .child(char_str)
+                            .into_any_element()
+                    }).collect::<Vec<_>>()
+                }
+                None => {
+                    // "Idle Mode" - Fast, single-div rendering
+                    vec![div()
+                        .relative()
+                        .child(
+                            canvas(
+                                move |_style, window, cx| {
+                                    window.request_layout(gpui::Style::default(), None, cx)
+                                },
+                                move |bounds, _layout_id, _window, cx| {
+                                    let _ = entity.update(cx, |this, _| {
+                                        this.root_bounds = bounds;
+                                    });
+                                }
+                            )
+                            .absolute()
+                            .size_full()
                         )
-                        .absolute()
-                        .size_full()
-                    )
-                    .when(is_selected, |this| this.bg(highlight_bg).text_color(rgb(0xFFFFFF)).rounded_sm())
-                    .when(!is_selected, |this| this.text_color(text_color))
-                    .child(char_str)
-            }))
+                        .text_color(text_color)
+                        .child(self.text.clone())
+                        .into_any_element()]
+                }
+            })
     }
 }
