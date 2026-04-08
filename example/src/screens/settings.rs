@@ -1,6 +1,6 @@
 use gpui::{
     Context, Entity, IntoElement, ParentElement, Styled,
-    div, rgb, InteractiveElement, StatefulInteractiveElement, px, prelude::*,
+    div, rgb, InteractiveElement, px, prelude::*,
 };
 use gpui_mobile::components::material::{MaterialTheme, Dropdown, PopupModal, ModalPosition, FilledTonalButton, TextButton, FilledButton, TextInput};
 use gpui_mobile::KeyboardType;

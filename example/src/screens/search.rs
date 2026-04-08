@@ -1,9 +1,9 @@
 use gpui::{
-    div, prelude::FluentBuilder, rgb, App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, Task, WeakEntity, SharedString, px,
+    div, rgb, App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement, ParentElement,
+    StatefulInteractiveElement, Styled, Task, WeakEntity, SharedString, px, MouseDownEvent,
 };
 use gpui_mobile::components::material::search_bar::SearchBar;
-use gpui_mobile::components::material::{MaterialTheme, SelectableTextView, Dropdown};
+use gpui_mobile::components::material::{MaterialTheme, SelectableTextView, Dropdown, TextField};
 use gpui_mobile::{set_text_input_callback, show_keyboard};
 use regex::Regex;
 use std::sync::LazyLock;
@@ -113,7 +113,7 @@ pub fn render(
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
 
-    let (query, cursor_pos, focused, results, selected_index, profile_open) = {
+    let (query, cursor_pos, focused, results, selected_index, profile_open): (String, usize, bool, Option<Vec<TermSearchResultsSegment>>, Option<usize>, bool) = {
         let state = search_state.read(cx);
         (
             state.query.text.clone(),
@@ -363,7 +363,8 @@ fn render_dictionary_entry(
     let lookup_handler = move |text: &str, cx: &mut App| {
         let text = text.to_string();
         let _ = search_state_handle_for_lookup.update(cx, |state, cx| {
-            state.query = text.clone();
+            state.query.text = text.clone();
+            state.query.cursor = text.len();
             state.queue_search(&text, cx, true);
             cx.notify();
         });

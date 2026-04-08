@@ -1208,7 +1208,7 @@ impl IosWindow {
         since = "0.0.1",
         note = "Not used because incorrectly hardcodes QWERTY for all virtual keyboards. Use handle_text_input instead."
     )]
-    pub fn handle_key_event(&self, key_code: u32, modifier_flags: u32, is_key_down: bool) {
+    pub fn handle_key_event(&self, _key_code: u32, _modifier_flags: u32, _is_key_down: bool) {
         // Since the bug is caused by
         // gpui_ios_handle_key_event throwing rogue QWERTY characters
         // this for an actual iPhone (touchscreen), so we can
@@ -1220,20 +1220,20 @@ impl IosWindow {
             modifier_flags_to_modifiers,
         };
 
-        let key = key_code_to_string(key_code);
-        let modifiers = modifier_flags_to_modifiers(modifier_flags);
+        let _key = key_code_to_string(_key_code);
+        let _modifiers = modifier_flags_to_modifiers(_modifier_flags);
 
         log::info!(
             "GPUI iOS: Key event - key: {:?}, modifiers: {:?}, down: {}",
-            key,
-            modifiers,
-            is_key_down
+            _key,
+            _modifiers,
+            _is_key_down
         );
 
         // On key-down, dispatch cursor-movement control codes through the
         // global text input callback so TextField-based components receive them.
-        if is_key_down {
-            match key_code {
+        if _is_key_down {
+            match _key_code {
                 0x50 => {
                     crate::dispatch_text_input("\x1b[D");
                 } // Left arrow

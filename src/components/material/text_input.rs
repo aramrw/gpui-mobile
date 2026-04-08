@@ -8,20 +8,6 @@ use gpui::{div, prelude::*, px, rgb, ElementId, MouseButton, MouseDownEvent, Mou
 
 use super::theme::MaterialTheme;
 
-/// Blend two RGB colors. `t` is 0.0–1.0 where 0.0 = `a`, 1.0 = `b`.
-fn blend_rgb(a: u32, b: u32, t: f32) -> u32 {
-    let ar = ((a >> 16) & 0xFF) as f32;
-    let ag = ((a >> 8) & 0xFF) as f32;
-    let ab = (a & 0xFF) as f32;
-    let br = ((b >> 16) & 0xFF) as f32;
-    let bg = ((b >> 8) & 0xFF) as f32;
-    let bb = (b & 0xFF) as f32;
-    let r = (ar + (br - ar) * t) as u32;
-    let g = (ag + (bg - ag) * t) as u32;
-    let b_val = (ab + (bb - ab) * t) as u32;
-    (r << 16) | (g << 8) | b_val
-}
-
 /// An interactive Material Design 3 text input field.
 ///
 /// When tapped, this component triggers the software keyboard via
@@ -416,40 +402,58 @@ impl<V: 'static> TextInput<V> {
     }
 }
 
-/// Approximate the cursor byte offset from a tap's X coordinate using the text system.
+/// Approximate the cursor byte offset from a tap's X coordinate.
+///
+/// NOTE: This currently uses a heuristic based on character groups (CJK vs Latin)
+/// because the official GPUI 0.12 text shaping API is not easily accessible
+/// from the App context.
 pub fn calculate_cursor_offset(
     text: &str,
-    font_size: gpui::Pixels,
+    _font_size: gpui::Pixels,
     x: f32,
-    cx: &gpui::App,
+    _cx: &gpui::App,
 ) -> usize {
-    use gpui::{Font, FontRun};
-    let font_id = cx.text_system().font_id(&Font::default()).unwrap_or(gpui::FontId(0));
-    let layout = cx.text_system().layout_line(text, font_size, &[FontRun {
-        len: text.len(),
-        font_id,
-    }]);
-
+    let mut current_x = 0.0;
     let mut best_index = 0;
-    let mut min_dist = f32::MAX;
+    let mut min_dist = x.abs();
 
-    for run in &layout.runs {
-        for glyph in &run.glyphs {
-            // Check the start of the glyph
-            let glyph_start_x = glyph.position.x.as_f32();
-            let dist_start = (glyph_start_x - x).abs();
-            if dist_start < min_dist {
-                min_dist = dist_start;
-                best_index = glyph.index;
-            }
+    for (idx, c) in text.char_indices() {
+        let char_width = if is_cjk(c) {
+            16.0 // Approximate width for base size
+        } else if c.is_ascii_uppercase() {
+            10.0
+        } else if c == ' ' {
+            4.0
+        } else {
+            8.0
+        };
+        
+        // We check the distance to the center of the character to decide
+        // whether to place the cursor before or after it.
+        let char_center_x = current_x + char_width / 2.0;
+        if x < char_center_x {
+            // Tap is closer to the start of this character
+            return idx;
+        }
+        
+        current_x += char_width;
+        let dist = (current_x - x).abs();
+        if dist < min_dist {
+            min_dist = dist;
+            best_index = idx + c.len_utf8();
         }
     }
     
-    // Check the very end of the line
-    let dist_to_end = (layout.width.as_f32() - x).abs();
-    if dist_to_end < min_dist {
-        best_index = text.len();
-    }
-
     best_index
+}
+
+fn is_cjk(c: char) -> bool {
+    matches!(c, 
+        '\u{3000}'..='\u{303F}' | // CJK Symbols and Punctuation
+        '\u{3040}'..='\u{309F}' | // Hiragana
+        '\u{30A0}'..='\u{30FF}' | // Katakana
+        '\u{4E00}'..='\u{9FFF}' | // Kanji
+        '\u{AC00}'..='\u{D7AF}' | // Hangul
+        '\u{FF00}'..='\u{FFEF}'   // Full-width forms
+    )
 }
