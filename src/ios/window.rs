@@ -10,6 +10,8 @@
 //! whose view hosts a CAMetalLayer. Rendering is performed by
 //! `gpui_wgpu::WgpuRenderer` which drives wgpu over the Metal backend.
 
+#![allow(unexpected_cfgs)]
+
 use super::events::*;
 use super::IosDisplay;
 use crate::momentum::{MomentumScroller, VelocityTracker};
@@ -1157,6 +1159,21 @@ impl IosWindow {
         }
     }
 
+    /// Handle text input from the software keyboard (NSString version for FFI)
+    pub fn handle_text_input(&self, text: *mut Object) {
+        if text.is_null() {
+            return;
+        }
+
+        unsafe {
+            let utf8: *const i8 = msg_send![text, UTF8String];
+            if !utf8.is_null() {
+                let text_str = std::ffi::CStr::from_ptr(utf8).to_string_lossy();
+                self.handle_text_input_str(&text_str);
+            }
+        }
+    }
+
     /// Handle text input from the software keyboard
     pub fn handle_text_input_str(&self, text_str: &str) {
         log::info!("GPUI iOS: Text input: {:?}", text_str);
@@ -1208,56 +1225,70 @@ impl IosWindow {
         since = "0.0.1",
         note = "Not used because incorrectly hardcodes QWERTY for all virtual keyboards. Use handle_text_input instead."
     )]
-    pub fn handle_key_event(&self, _key_code: u32, _modifier_flags: u32, _is_key_down: bool) {
+    pub fn handle_key_event(&self, key_code: u32, modifier_flags: u32, is_key_down: bool) {
         // Since the bug is caused by
         // gpui_ios_handle_key_event throwing rogue QWERTY characters
         // this for an actual iPhone (touchscreen), so we can
         // just kill the hardware key event handler dead in its tracks.
+        let _ = key_code;
+        let _ = modifier_flags;
+        let _ = is_key_down;
         return;
 
-        use super::text_input::{
-            key_code_to_key_down, key_code_to_key_up, key_code_to_string,
-            modifier_flags_to_modifiers,
-        };
+        #[allow(unreachable_code)]
+        {
+            use super::text_input::{
+                key_code_to_key_down, key_code_to_key_up, key_code_to_string,
+                modifier_flags_to_modifiers,
+            };
 
-        let _key = key_code_to_string(_key_code);
-        let _modifiers = modifier_flags_to_modifiers(_modifier_flags);
+            let key = key_code_to_string(key_code);
+            let modifiers = modifier_flags_to_modifiers(modifier_flags);
 
-        log::info!(
-            "GPUI iOS: Key event - key: {:?}, modifiers: {:?}, down: {}",
-            _key,
-            _modifiers,
-            _is_key_down
-        );
+            log::info!(
+                "GPUI iOS: Key event - key: {:?}, modifiers: {:?}, down: {}",
+                key,
+                modifiers,
+                is_key_down
+            );
 
-        // On key-down, dispatch cursor-movement control codes through the
-        // global text input callback so TextField-based components receive them.
-        if _is_key_down {
-            match _key_code {
-                0x50 => {
-                    crate::dispatch_text_input("\x1b[D");
-                } // Left arrow
-                0x4F => {
-                    crate::dispatch_text_input("\x1b[C");
-                } // Right arrow
-                0x4A => {
-                    crate::dispatch_text_input("\x1b[H");
-                } // Home
-                0x4D => {
-                    crate::dispatch_text_input("\x1b[F");
-                } // End
-                _ => {}
+            // On key-down, dispatch cursor-movement control codes through the
+            // global text input callback so TextField-based components receive them.
+            if is_key_down {
+                match key_code {
+                    0x50 => {
+                        crate::dispatch_text_input("\x1b[D");
+                    } // Left arrow
+                    0x4F => {
+                        crate::dispatch_text_input("\x1b[C");
+                    } // Right arrow
+                    0x4A => {
+                        crate::dispatch_text_input("\x1b[H");
+                    } // Home
+                    0x4D => {
+                        crate::dispatch_text_input("\x1b[F");
+                    } // End
+                    _ => {}
+                }
             }
-        }
 
-        let event = if is_key_down {
-            key_code_to_key_down(key_code, modifier_flags)
-        } else {
-            key_code_to_key_up(key_code, modifier_flags)
-        };
+            let event = if is_key_down {
+                key_code_to_key_down(key_code, modifier_flags)
+            } else {
+                key_code_to_key_up(key_code, modifier_flags)
+            };
 
-        if let Some(callback) = self.input_callback.borrow_mut().as_mut() {
-            callback(event);
+            if let PlatformInput::KeyDown(key_down) = event {
+                let event = PlatformInput::KeyDown(gpui::KeyDownEvent {
+                    keystroke: key_down.keystroke,
+                    is_held: false,
+                    prefer_character_input: false,
+                });
+
+                if let Some(callback) = self.input_callback.borrow_mut().as_mut() {
+                    callback(event);
+                }
+            }
         }
     }
 

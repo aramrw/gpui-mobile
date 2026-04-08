@@ -13,6 +13,10 @@
 //! ## Integration with GPUI
 //!
 //! This crate depends on the `gpui` crate from the Zed repository for all
+
+#![allow(warnings)]
+#![allow(unexpected_cfgs)]
+
 //! core types: `Platform`, `PlatformWindow`, `PlatformDisplay`, `Pixels`,
 //! `DevicePixels`, `Size`, `Point`, `Bounds`, event types, text system traits,
 //! etc.  It also depends on `gpui_wgpu` for the GPU renderer (`WgpuRenderer`)

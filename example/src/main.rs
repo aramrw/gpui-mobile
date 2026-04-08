@@ -1,3 +1,4 @@
+#![allow(warnings)]
 //! Binary entry point for the cross-platform GPUI example app.
 //!
 //! On **iOS** this provides the standard `fn main()` entry point which
