@@ -143,6 +143,10 @@ pub struct SearchBar {
     trailing_icon: Option<String>,
     /// Second trailing icon (e.g. avatar).
     trailing_icon2: Option<String>,
+    /// Byte offset of the cursor within the query text.
+    cursor_position: usize,
+    /// Whether the search bar currently has keyboard focus.
+    focused: bool,
     /// Handler for tapping the search bar body (expand to search view).
     on_tap: Option<ClickHandler>,
     /// Handler for tapping the leading icon.
@@ -170,6 +174,8 @@ impl SearchBar {
             leading_icon: None,
             trailing_icon: None,
             trailing_icon2: None,
+            cursor_position: 0,
+            focused: false,
             on_tap: None,
             on_leading_tap: None,
             on_trailing_tap: None,
@@ -178,6 +184,18 @@ impl SearchBar {
             full_width: true,
             id: None,
         }
+    }
+
+    /// Set the cursor byte offset within the query text.
+    pub fn cursor(mut self, position: usize) -> Self {
+        self.cursor_position = position;
+        self
+    }
+
+    /// Set whether the search bar is focused (shows an active cursor).
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
     }
 
     /// Set the placeholder text shown when there is no query.
@@ -366,22 +384,61 @@ impl IntoElement for SearchBar {
         // ── Text area (placeholder or query) ─────────────────────────────
 
         let text_content = if let Some(ref query_text) = self.query {
-            div()
-                .flex_1()
-                .text_base()
-                .line_height(px(24.0))
-                .text_color(on_surface)
-                .overflow_hidden()
-                .child(query_text.clone())
+            if self.focused {
+                let cursor_pos = self.cursor_position.min(query_text.len());
+                let before = &query_text[..cursor_pos];
+                let after = &query_text[cursor_pos..];
+
+                div()
+                    .flex_1()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .text_base()
+                    .line_height(px(24.0))
+                    .text_color(on_surface)
+                    .overflow_hidden()
+                    .child(div().child(before.to_string()))
+                    .child(
+                        div()
+                            .w(px(2.0))
+                            .h(px(20.0))
+                            .bg(color(t.primary))
+                            .ml_px(),
+                    )
+                    .child(div().child(after.to_string()))
+            } else {
+                div()
+                    .flex_1()
+                    .text_base()
+                    .line_height(px(24.0))
+                    .text_color(on_surface)
+                    .overflow_hidden()
+                    .child(query_text.clone())
+            }
         } else {
             let placeholder_text = self.placeholder.as_deref().unwrap_or("Search").to_string();
-            div()
+            let mut row = div()
                 .flex_1()
+                .flex()
+                .flex_row()
+                .items_center()
                 .text_base()
                 .line_height(px(24.0))
                 .text_color(on_surface_variant)
                 .overflow_hidden()
-                .child(placeholder_text)
+                .child(placeholder_text);
+
+            if self.focused {
+                row = row.child(
+                    div()
+                        .w(px(2.0))
+                        .h(px(20.0))
+                        .bg(color(t.primary))
+                        .ml_px(),
+                );
+            }
+            row
         };
 
         bar = bar.child(text_content);
@@ -510,6 +567,10 @@ pub struct SearchView {
     on_leading_tap: Option<ClickHandler>,
     /// Handler for tapping the trailing icon.
     on_trailing_tap: Option<ClickHandler>,
+    /// Byte offset of the cursor within the query text.
+    cursor_position: usize,
+    /// Whether the search view currently has keyboard focus.
+    focused: bool,
     /// Suggestion items.
     suggestions: Vec<SearchSuggestion>,
     /// Additional body content (rendered below the suggestions).
@@ -529,10 +590,24 @@ impl SearchView {
             trailing_icon: None,
             on_leading_tap: None,
             on_trailing_tap: None,
+            cursor_position: 0,
+            focused: false,
             suggestions: Vec::new(),
             body_children: Vec::new(),
             id: None,
         }
+    }
+
+    /// Set the cursor byte offset within the query text.
+    pub fn cursor(mut self, position: usize) -> Self {
+        self.cursor_position = position;
+        self
+    }
+
+    /// Set whether the search view is focused (shows an active cursor).
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
     }
 
     /// Set the current query text.
@@ -681,22 +756,61 @@ impl IntoElement for SearchView {
 
         // Query / placeholder text
         let text_el = if let Some(ref query_text) = self.query {
-            div()
-                .flex_1()
-                .text_base()
-                .line_height(px(24.0))
-                .text_color(on_surface)
-                .overflow_hidden()
-                .child(query_text.clone())
+            if self.focused {
+                let cursor_pos = self.cursor_position.min(query_text.len());
+                let before = &query_text[..cursor_pos];
+                let after = &query_text[cursor_pos..];
+
+                div()
+                    .flex_1()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .text_base()
+                    .line_height(px(24.0))
+                    .text_color(on_surface)
+                    .overflow_hidden()
+                    .child(div().child(before.to_string()))
+                    .child(
+                        div()
+                            .w(px(2.0))
+                            .h(px(20.0))
+                            .bg(color(t.primary))
+                            .ml_px(),
+                    )
+                    .child(div().child(after.to_string()))
+            } else {
+                div()
+                    .flex_1()
+                    .text_base()
+                    .line_height(px(24.0))
+                    .text_color(on_surface)
+                    .overflow_hidden()
+                    .child(query_text.clone())
+            }
         } else {
             let placeholder_text = self.placeholder.as_deref().unwrap_or("Search").to_string();
-            div()
+            let mut row = div()
                 .flex_1()
+                .flex()
+                .flex_row()
+                .items_center()
                 .text_base()
                 .line_height(px(24.0))
                 .text_color(on_surface_variant)
                 .overflow_hidden()
-                .child(placeholder_text)
+                .child(placeholder_text);
+
+            if self.focused {
+                row = row.child(
+                    div()
+                        .w(px(2.0))
+                        .h(px(20.0))
+                        .bg(color(t.primary))
+                        .ml_px(),
+                );
+            }
+            row
         };
 
         input_row = input_row.child(text_el);

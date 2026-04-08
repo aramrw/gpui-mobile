@@ -10,7 +10,7 @@ use super::Router;
 pub struct SettingsState {
     pub profile_dropdown_open: bool,
     pub show_add_profile_modal: bool,
-    pub new_profile_name: String,
+    pub new_profile_name: gpui_mobile::components::material::TextField,
 }
 
 impl SettingsState {
@@ -18,7 +18,7 @@ impl SettingsState {
         Self {
             profile_dropdown_open: false,
             show_add_profile_modal: false,
-            new_profile_name: String::new(),
+            new_profile_name: gpui_mobile::components::material::TextField::new(""),
         }
     }
 
@@ -39,11 +39,11 @@ impl SettingsState {
     }
 
     pub fn add_profile(&mut self, cx: &mut Context<Self>) {
-        if self.new_profile_name.is_empty() {
+        if self.new_profile_name.text.is_empty() {
             return;
         }
 
-        let name = self.new_profile_name.clone();
+        let name = self.new_profile_name.text.clone();
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         {
             let ycd = global_yomichan.read();
@@ -60,8 +60,10 @@ impl SettingsState {
             let _ = ycd.update_options();
         }
         
-        self.new_profile_name.clear();
+        self.new_profile_name.text.clear();
+        self.new_profile_name.cursor = 0;
         self.show_add_profile_modal = false;
+        gpui_mobile::hide_keyboard();
         cx.notify();
     }
 
@@ -244,7 +246,8 @@ pub fn render(state: &Entity<SettingsState>, search_state: &Entity<super::search
 
 fn render_add_profile_modal(state: &Entity<SettingsState>, search_state: &Entity<super::search::SearchState>, theme: MaterialTheme, cx: &mut Context<Router>) -> impl IntoElement {
     let state_read = state.read(cx);
-    let name_value = state_read.new_profile_name.clone();
+    let name_value = state_read.new_profile_name.text.clone();
+    let cursor_pos = state_read.new_profile_name.cursor;
 
     PopupModal::new(theme)
         .position(ModalPosition::Center)
@@ -272,15 +275,28 @@ fn render_add_profile_modal(state: &Entity<SettingsState>, search_state: &Entity
                         .label("Profile Name")
                         .placeholder("Enter name...")
                         .value(&name_value)
+                        .cursor(cursor_pos)
                         .focused(true)
                         .on_tap_notify({
                             let state = state.clone();
                             let search_state = search_state.clone();
                             let async_cx = cx.to_async();
-                            move |_| {
+                            move |event, cx| {
                                 let state = state.clone();
                                 let search_state = search_state.clone();
                                 let async_cx = async_cx.clone();
+                                
+                                // Position cursor
+                                let _ = state.update(cx, |s, cx| {
+                                    s.new_profile_name.cursor = gpui_mobile::components::material::text_input::calculate_cursor_offset(
+                                        &s.new_profile_name.text,
+                                        px(14.0).into(),
+                                        event.position.x.as_f32() - 12.0, // TEXT_START_X
+                                        cx
+                                    );
+                                    cx.notify();
+                                });
+
                                 gpui_mobile::show_keyboard_with_type(KeyboardType::Default);
                                 gpui_mobile::set_text_input_callback(Some(Box::new(move |text| {
                                     let state = state.clone();
@@ -289,9 +305,9 @@ fn render_add_profile_modal(state: &Entity<SettingsState>, search_state: &Entity
                                     let _ = async_cx.update(move |cx| {
                                         let _ = state.update(cx, |s, cx| {
                                             if text == "\x08" {
-                                                s.new_profile_name.pop();
+                                                s.new_profile_name.delete_at_cursor();
                                             } else if text != "\n" {
-                                                s.new_profile_name.push_str(&text);
+                                                s.new_profile_name.insert_at_cursor(&text);
                                             }
                                             cx.notify();
                                         });
@@ -315,6 +331,7 @@ fn render_add_profile_modal(state: &Entity<SettingsState>, search_state: &Entity
                                     move |_, _, _, cx| {
                                         state.update(cx, |s, cx| {
                                             s.show_add_profile_modal = false;
+                                            gpui_mobile::hide_keyboard();
                                             cx.notify();
                                         });
                                     }
@@ -349,7 +366,6 @@ fn settings_card(bg: u32) -> gpui::Div {
         .flex_col()
         .rounded_xl()
         .bg(rgb(bg))
-        .overflow_hidden()
 }
 
 fn toggle_row(

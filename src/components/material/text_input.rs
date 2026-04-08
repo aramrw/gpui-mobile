@@ -53,8 +53,8 @@ pub struct TextInput<V: 'static> {
     cursor_position: usize,
     selection: Option<(usize, usize)>,
     on_tap: Option<Box<dyn Fn(&mut V, &MouseDownEvent, &mut gpui::Window, &mut gpui::Context<V>)>>,
-    /// Simple tap callback that receives the MouseDownEvent for tap position.
-    on_tap_simple: Option<std::rc::Rc<dyn Fn(&MouseDownEvent)>>,
+    /// Simple tap callback that receives the MouseDownEvent and App for tap position.
+    on_tap_simple: Option<std::rc::Rc<dyn Fn(&MouseDownEvent, &mut gpui::App)>>,
     /// Callback for when a Monokakido-style selection starts.
     on_selection_start: Option<std::rc::Rc<dyn Fn(&MouseDownEvent)>>,
     /// Callback for when a Monokakido-style selection moves.
@@ -152,10 +152,10 @@ impl<V: 'static> TextInput<V> {
         self
     }
 
-    /// Set a simple tap callback that receives the `MouseDownEvent` for tap
+    /// Set a simple tap callback that receives the `MouseDownEvent` and `App` for tap
     /// position. Does NOT lease the parent entity — use this instead of
     /// `on_tap` to avoid entity lease conflicts.
-    pub fn on_tap_notify(mut self, handler: impl Fn(&MouseDownEvent) + 'static) -> Self {
+    pub fn on_tap_notify(mut self, handler: impl Fn(&MouseDownEvent, &mut gpui::App) + 'static) -> Self {
         self.on_tap_simple = Some(std::rc::Rc::new(handler));
         self
     }
@@ -269,9 +269,9 @@ impl<V: 'static> TextInput<V> {
             let handler_clone = handler.clone();
             input_box = input_box.on_mouse_down(
                 MouseButton::Left,
-                move |event: &MouseDownEvent, _window: &mut gpui::Window, _cx: &mut gpui::App| {
+                move |event: &MouseDownEvent, _window: &mut gpui::Window, cx: &mut gpui::App| {
                     log::info!("TextInput: on_tap_simple handler firing");
-                    (handler_clone)(event);
+                    (handler_clone)(event, cx);
                 },
             );
         } else if let Some(on_tap) = self.on_tap {
@@ -414,4 +414,42 @@ impl<V: 'static> TextInput<V> {
             row
         }
     }
+}
+
+/// Approximate the cursor byte offset from a tap's X coordinate using the text system.
+pub fn calculate_cursor_offset(
+    text: &str,
+    font_size: gpui::Pixels,
+    x: f32,
+    cx: &gpui::App,
+) -> usize {
+    use gpui::{Font, FontRun};
+    let font_id = cx.text_system().font_id(&Font::default()).unwrap_or(gpui::FontId(0));
+    let layout = cx.text_system().layout_line(text, font_size, &[FontRun {
+        len: text.len(),
+        font_id,
+    }]);
+
+    let mut best_index = 0;
+    let mut min_dist = f32::MAX;
+
+    for run in &layout.runs {
+        for glyph in &run.glyphs {
+            // Check the start of the glyph
+            let glyph_start_x = glyph.position.x.as_f32();
+            let dist_start = (glyph_start_x - x).abs();
+            if dist_start < min_dist {
+                min_dist = dist_start;
+                best_index = glyph.index;
+            }
+        }
+    }
+    
+    // Check the very end of the line
+    let dist_to_end = (layout.width.as_f32() - x).abs();
+    if dist_to_end < min_dist {
+        best_index = text.len();
+    }
+
+    best_index
 }

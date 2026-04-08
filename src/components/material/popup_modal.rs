@@ -5,7 +5,7 @@
 
 use gpui::{
     div, px, rgba, AnyElement, IntoElement, ParentElement, Styled,
-    InteractiveElement, prelude::FluentBuilder,
+    InteractiveElement, prelude::*, MouseButton, Stateful,
 };
 use std::rc::Rc;
 
@@ -23,6 +23,7 @@ pub enum ModalPosition {
 ///
 /// Wraps content in a fullscreen overlay with a blurred backdrop.
 pub struct PopupModal {
+    #[allow(dead_code)]
     theme: MaterialTheme,
     position: ModalPosition,
     child: Option<AnyElement>,
@@ -56,7 +57,7 @@ impl PopupModal {
 }
 
 impl IntoElement for PopupModal {
-    type Element = <gpui::Div as IntoElement>::Element;
+    type Element = <Stateful<gpui::Div> as IntoElement>::Element;
 
     fn into_element(self) -> Self::Element {
         let margin = match self.position {
@@ -65,38 +66,58 @@ impl IntoElement for PopupModal {
             ModalPosition::Bottom => px(80.0),
         };
 
-        // Fullscreen blurry backdrop
+        // Root container for the entire modal system
         div()
+            .id("popup-modal-root")
             .absolute()
             .top_0()
             .left_0()
             .size_full()
-            .bg(rgba(0x000000_66)) // Dark semi-transparent
-            .flex()
-            .flex_col()
-            .items_center()
-            .map(|this| match self.position {
-                ModalPosition::Top => this.justify_start(),
-                ModalPosition::Center => this.justify_center(),
-                ModalPosition::Bottom => this.justify_end(),
-            })
-            .when(self.position == ModalPosition::Top, |this| this.pt(margin))
-            .when(self.position == ModalPosition::Bottom, |this| this.pb(margin))
             .child(
-                // The actual modal content container
+                // BACKDROP LAYER: Sibling behind the content
                 div()
-                    .id("modal-content")
-                    .child(self.child.unwrap_or_else(|| div().into_any_element()))
-                    .on_mouse_down(gpui::MouseButton::Left, move |_, _, _| {
-                        // Stop propagation is handled implicitly by having an ID and being a child of the backdrop
+                    .id("modal-backdrop")
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .bg(rgba(0x000000_66))
+                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        // Clicking the backdrop hides keyboard and closes modal
+                        crate::hide_keyboard();
+                        if let Some(handler) = &self.on_close {
+                            (handler)(window, cx);
+                        }
                     })
             )
-            // Clicks on the backdrop close the modal
-            .on_mouse_down(gpui::MouseButton::Left, move |_event, window, cx| {
-                if let Some(handler) = &self.on_close {
-                    (handler)(window, cx);
-                }
-            })
+            .child(
+                // CONTENT LAYER: Sibling in front of the backdrop
+                div()
+                    .id("modal-content-layer")
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .map(|this: Stateful<gpui::Div>| match self.position {
+                        ModalPosition::Top => this.justify_start(),
+                        ModalPosition::Center => this.justify_center(),
+                        ModalPosition::Bottom => this.justify_end(),
+                    })
+                    .when(self.position == ModalPosition::Top, |this: Stateful<gpui::Div>| this.pt(margin))
+                    .when(self.position == ModalPosition::Bottom, |this: Stateful<gpui::Div>| this.pb(margin))
+                    .child(
+                        // The actual content box
+                        div()
+                            .id("modal-content-box")
+                            .on_mouse_down(MouseButton::Left, |_, _, _| {
+                                // CONSUME EVENT: Stop propagation to backdrop
+                            })
+                            .child(self.child.unwrap_or_else(|| div().into_any_element()))
+                    )
+            )
             .into_element()
     }
 }

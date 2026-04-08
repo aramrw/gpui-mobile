@@ -264,9 +264,18 @@ fn register_text_input_view_class() -> &'static Class {
                     let window = &*(window_ptr as *const IosWindow);
                     window.handle_delete_backward();
                 }
-                // Call super
+                
+                // Call super - this deletes our dummy character
                 let superclass = class!(UITextField);
                 let _: () = msg_send![super(this, superclass), deleteBackward];
+
+                // Reset to dummy character so next backspace also works
+                let dummy: *mut Object = msg_send![class!(NSString), alloc];
+                let dummy: *mut Object = msg_send![dummy, initWithBytes: " ".as_ptr()
+                    length: 1
+                    encoding: 4
+                ];
+                let _: () = msg_send![this, setText: dummy];
             }
         }
 
@@ -310,14 +319,44 @@ fn register_text_input_view_class() -> &'static Class {
                 let utf8: *const i8 = msg_send![text, UTF8String];
                 if !utf8.is_null() {
                     let text_str = std::ffi::CStr::from_ptr(utf8).to_string_lossy();
-                    if !text_str.is_empty() {
-                        log::info!("GPUI iOS: Text finalized: {:?}", text_str);
-                        window.handle_text_input(text);
+                    
+                    // If text is empty, deleteBackward was likely called (and handled
+                    // separately). We just need to reset the dummy character.
+                    if text_str.is_empty() {
+                        let dummy: *mut Object = msg_send![class!(NSString), alloc];
+                        let dummy: *mut Object = msg_send![dummy, initWithBytes: " ".as_ptr()
+                            length: 1
+                            encoding: 4
+                        ];
+                        let _: () = msg_send![this, setText: dummy];
+                        return;
+                    }
 
-                        // Clear the field so it's ready for the next input
-                        let empty_string: *mut Object = msg_send![class!(NSString), alloc];
-                        let empty_string: *mut Object = msg_send![empty_string, init];
-                        let _: () = msg_send![this, setText: empty_string];
+                    // If text is still just the dummy space, do nothing.
+                    if text_str == " " {
+                        return;
+                    }
+
+                    // Something was entered. Find what was added relative to " ".
+                    // We assume it was appended or replaced the space.
+                    let final_text = if text_str.starts_with(' ') {
+                        &text_str[1..]
+                    } else {
+                        &text_str
+                    };
+
+                    if !final_text.is_empty() {
+                        log::info!("GPUI iOS: Text finalized: {:?}", final_text);
+                        // We use handle_text_input_str to pass the cleaned string
+                        window.handle_text_input_str(final_text);
+
+                        // Reset to dummy character
+                        let dummy: *mut Object = msg_send![class!(NSString), alloc];
+                        let dummy: *mut Object = msg_send![dummy, initWithBytes: " ".as_ptr()
+                            length: 1
+                            encoding: 4
+                        ];
+                        let _: () = msg_send![this, setText: dummy];
                     }
                 }
             }
@@ -541,6 +580,16 @@ impl IosWindow {
 
             let _: () = msg_send![text_input_view, setUserInteractionEnabled: YES];
             let _: () = msg_send![view, addSubview: text_input_view];
+
+            // Set initial text to a dummy character (" ") so that deleteBackward is
+            // called repeatedly when the user holds the backspace key (iOS doesn't
+            // call deleteBackward if the text field is empty).
+            let dummy_string: *mut Object = msg_send![class!(NSString), alloc];
+            let dummy_string: *mut Object = msg_send![dummy_string, initWithBytes: " ".as_ptr()
+                length: 1
+                encoding: 4 // NSUTF8StringEncoding
+            ];
+            let _: () = msg_send![text_input_view, setText: dummy_string];
 
             // --- Initialise the wgpu renderer (Metal backend) ---------------
             let pixel_w = (screen_bounds_cg.size.width * scale) as i32;
@@ -1109,38 +1158,18 @@ impl IosWindow {
     }
 
     /// Handle text input from the software keyboard
-    pub fn handle_text_input(&self, text: *mut Object) {
-        if text.is_null() {
-            return;
-        }
+    pub fn handle_text_input_str(&self, text_str: &str) {
+        log::info!("GPUI iOS: Text input: {:?}", text_str);
 
-        unsafe {
-            // Convert NSString to Rust String
-            let utf8: *const i8 = msg_send![text, UTF8String];
-            if utf8.is_null() {
-                return;
-            }
+        // Try the global text input callback (for our TextInput components).
+        // The text is captured in PENDING_TEXT regardless of whether we also
+        // send key events below.
+        let dispatched = crate::dispatch_text_input(text_str);
 
-            let text_str = std::ffi::CStr::from_ptr(utf8)
-                .to_string_lossy()
-                .into_owned();
-
-            /// PROBLEM: The "Text Finalized" log that prints in the
-            /// "fn on_editing_changed" fn correctly prints out the real text.
-            /// turning the string into rust also isnt a problem, its the same japanese
-            /// basically that log and this log is identical, which is good up till here
-            log::info!("GPUI iOS: Text input: {:?}", text_str);
-
-            // Try the global text input callback (for our TextInput components).
-            // The text is captured in PENDING_TEXT regardless of whether we also
-            // send key events below.
-            let dispatched = crate::dispatch_text_input(&text_str);
-
-            // Try the input handler (for GPUI's built-in text fields)
-            if !dispatched {
-                if let Some(handler) = self.input_handler.borrow_mut().as_mut() {
-                    handler.replace_text_in_range(None, &text_str);
-                }
+        // Try the input handler (for GPUI's built-in text fields)
+        if !dispatched {
+            if let Some(handler) = self.input_handler.borrow_mut().as_mut() {
+                handler.replace_text_in_range(None, text_str);
             }
         }
     }

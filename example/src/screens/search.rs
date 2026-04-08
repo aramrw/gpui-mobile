@@ -16,7 +16,8 @@ use crate::GlobalYomichan;
 pub static CLEANUP_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[[:punct:]]").unwrap());
 
 pub struct SearchState {
-    pub query: String,
+    pub query: TextField,
+    pub focused: bool,
     pub search_results: Option<Vec<TermSearchResultsSegment>>,
     pub search_task: Option<Task<()>>,
     pub selected_term_index: Option<usize>,
@@ -27,7 +28,8 @@ pub struct SearchState {
 impl SearchState {
     pub fn new(_window: &mut gpui::Window, _cx: &mut Context<Self>) -> Self {
         Self {
-            query: String::new(),
+            query: TextField::new(""),
+            focused: false,
             search_results: None,
             search_task: None,
             selected_term_index: None,
@@ -111,10 +113,12 @@ pub fn render(
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
 
-    let (query, results, selected_index, profile_open) = {
+    let (query, cursor_pos, focused, results, selected_index, profile_open) = {
         let state = search_state.read(cx);
         (
-            state.query.clone(),
+            state.query.text.clone(),
+            state.query.cursor,
+            state.focused,
             state.search_results.clone(),
             state.selected_term_index,
             state.profile_dropdown_open,
@@ -144,6 +148,8 @@ pub fn render(
         .child(
             SearchBar::new(theme)
                 .query(query.clone())
+                .cursor(cursor_pos)
+                .focused(focused)
                 .placeholder("Search term...")
                 .leading_element({
                     let mut dropdown = Dropdown::new(
@@ -175,36 +181,43 @@ pub fn render(
                     }
                     dropdown
                 })
-                .on_tap(cx.listener(move |_, _, _, cx| {
+                .on_tap(cx.listener(move |_, event: &MouseDownEvent, _, cx| {
                     let search_state_handle = search_state_handle.clone();
                     let async_cx = cx.to_async();
+                    
+                    // Position cursor accurately from tap
+                    let _ = search_state_handle.update(cx, |state, cx| {
+                        state.focused = true;
+                        // SearchBar text starts at approx x=56 (icon + gap)
+                        let text_x = event.position.x.as_f32() - 56.0;
+                        state.query.cursor = gpui_mobile::components::material::text_input::calculate_cursor_offset(
+                            &state.query.text,
+                            px(16.0).into(), // SearchBar text is base size
+                            text_x,
+                            cx
+                        );
+                        cx.notify();
+                    });
+
                     show_keyboard();
                     set_text_input_callback(Some(Box::new(move |text| {
                         if text == "\n" {
                             gpui_mobile::hide_keyboard();
                             return;
                         }
-                        if text == "\x08" {
-                            let search_state_handle = search_state_handle.clone();
-                            let async_cx = async_cx.clone();
-                            async_cx.update(move |cx| {
-                                let _ = search_state_handle.update(cx, |state, cx| {
-                                    state.query.pop();
-                                    let q = state.query.clone();
-                                    state.queue_search(&q, cx, true);
-                                    cx.notify();
-                                });
-                            });
-                            return;
-                        }
+
                         let search_state_handle = search_state_handle.clone();
                         let text = text.to_string();
-
                         let async_cx = async_cx.clone();
+
                         async_cx.update(move |cx| {
                             let _ = search_state_handle.update(cx, |state, cx| {
-                                state.query.push_str(&text);
-                                let q = state.query.clone();
+                                if text == "\x08" {
+                                    state.query.delete_at_cursor();
+                                } else {
+                                    state.query.insert_at_cursor(&text);
+                                }
+                                let q = state.query.text.clone();
                                 state.queue_search(&q, cx, true);
                                 cx.notify();
                             });
@@ -213,7 +226,9 @@ pub fn render(
                 }))
                 .on_trailing_tap(cx.listener(move |_, _, _, cx| {
                     search_state_handle_for_trailing.update(cx, |state, cx| {
-                        state.query.clear();
+                        state.query.text.clear();
+                        state.query.cursor = 0;
+                        state.query.selection = None;
                         state.search_results = None;
                         state.selected_term_index = None;
                         state.view_cache.clear();
@@ -229,8 +244,15 @@ pub fn render(
                 .overflow_scroll()
                 .on_mouse_down(
                     gpui::MouseButton::Left,
-                    cx.listener(|_, _, _, _| {
-                        gpui_mobile::hide_keyboard();
+                    cx.listener({
+                        let search_state = search_state.clone();
+                        move |_, _, _, cx| {
+                            search_state.update(cx, |s, cx| {
+                                s.focused = false;
+                                cx.notify();
+                            });
+                            gpui_mobile::hide_keyboard();
+                        }
                     }),
                 )
                 .child(if let Some(results) = results {

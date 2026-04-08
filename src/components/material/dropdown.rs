@@ -4,8 +4,9 @@
 
 use gpui::{
     div, IntoElement, ParentElement, Styled, Stateful,
-    InteractiveElement, prelude::FluentBuilder,
+    InteractiveElement, prelude::*,
 };
+use log::{info, log};
 
 use super::theme::{color, MaterialTheme};
 use super::menu::{Menu, MenuAnchor};
@@ -16,7 +17,6 @@ use super::menu::{Menu, MenuAnchor};
 pub struct Dropdown {
     theme: MaterialTheme,
     label: String,
-    icon: Option<String>,
     menu_items: Vec<DropdownItem>,
     is_open: bool,
     on_toggle: Option<Box<dyn Fn(&gpui::MouseDownEvent, &mut gpui::Window, &mut gpui::App) + 'static>>,
@@ -32,16 +32,10 @@ impl Dropdown {
         Self {
             theme,
             label: label.into(),
-            icon: None,
             menu_items: Vec::new(),
             is_open: false,
             on_toggle: None,
         }
-    }
-
-    pub fn icon(mut self, icon: impl Into<String>) -> Self {
-        self.icon = Some(icon.into());
-        self
     }
 
     pub fn item(mut self, label: impl Into<String>, on_click: impl Fn(&gpui::MouseDownEvent, &mut gpui::Window, &mut gpui::App) + 'static) -> Self {
@@ -76,10 +70,14 @@ impl IntoElement for Dropdown {
             menu = menu.item(item.label, "", item.on_click);
         }
 
+        // Use a simpler ID to avoid potential collisions during re-renders
+        let dropdown_id = format!("dropdown-{}", self.label);
+
         MenuAnchor::new(t)
             .open(self.is_open)
             .anchor(
                 div()
+                    .id(dropdown_id)
                     .flex()
                     .flex_row()
                     .items_center()
@@ -104,6 +102,7 @@ impl IntoElement for Dropdown {
                     )
                     .when_some(self.on_toggle, |this, handler| {
                         this.on_mouse_down(gpui::MouseButton::Left, move |e, window, cx| {
+                            info!("clicking button!");
                             handler(e, window, cx);
                         })
                     })
