@@ -27,15 +27,14 @@ impl SettingsState {
         {
             let ycd = global_yomichan.read();
             let opts = ycd.options();
-            let mut opts_guard = opts.write();
-            if let Some(idx) = opts_guard.profiles.get_index_of(&name) {
-                opts_guard.current_profile = idx;
+            {
+                let mut opts_guard = opts.write();
+                if let Some(idx) = opts_guard.profiles.get_index_of(&name) {
+                    opts_guard.current_profile = idx;
+                }
             }
             let _ = ycd.update_options();
         }
-        // Notify all router instances that state changed
-        // This is a bit tricky if we don't have the router entity, 
-        // but GlobalYomichan update might be enough if listeners are set.
     }
 
     pub fn add_profile(&mut self, cx: &mut Context<Self>) {
@@ -48,13 +47,15 @@ impl SettingsState {
         {
             let ycd = global_yomichan.read();
             let opts = ycd.options();
-            let mut opts_guard = opts.write();
-            
-            if !opts_guard.profiles.contains_key(&name) {
-                let current_profile = opts_guard.profiles.get_index(opts_guard.current_profile).map(|(_, v)| v.clone()).unwrap_or_default();
-                opts_guard.profiles.insert(name.clone(), current_profile);
-                if let Some(idx) = opts_guard.profiles.get_index_of(&name) {
-                    opts_guard.current_profile = idx;
+            {
+                let mut opts_guard = opts.write();
+                
+                if !opts_guard.profiles.contains_key(&name) {
+                    let current_profile = opts_guard.profiles.get_index(opts_guard.current_profile).map(|(_, v)| v.clone()).unwrap_or_default();
+                    opts_guard.profiles.insert(name.clone(), current_profile);
+                    if let Some(idx) = opts_guard.profiles.get_index_of(&name) {
+                        opts_guard.current_profile = idx;
+                    }
                 }
             }
             let _ = ycd.update_options();
@@ -206,15 +207,39 @@ pub fn render(state: &Entity<SettingsState>, search_state: &Entity<super::search
                                             FilledTonalButton::new("+", theme)
                                                 .on_click(cx.listener({
                                                     let state = state.clone();
+                                                    let search_state = search_state.clone();
                                                     move |_, _, _, cx| {
+                                                        let async_cx = cx.to_async();
                                                         state.update(cx, |s, cx| {
                                                             s.show_add_profile_modal = true;
+
+                                                            // WORKAROUND: Programmatically focus and show keyboard
+                                                            gpui_mobile::show_keyboard();
+
+                                                            let state = state.clone();
+                                                            let search_state = search_state.clone();
+                                                            gpui_mobile::set_text_input_callback(Some(Box::new(move |text| {
+                                                                let state = state.clone();
+                                                                let search_state = search_state.clone();
+                                                                let text = text.to_string();
+                                                                let _ = async_cx.update(move |cx| {
+                                                                    let _ = state.update(cx, |s, cx| {
+                                                                        if text == "\x08" {
+                                                                            s.new_profile_name.delete_at_cursor();
+                                                                        } else if text != "\n" {
+                                                                            s.new_profile_name.insert_at_cursor(&text);
+                                                                        }
+                                                                        cx.notify();
+                                                                    });
+                                                                    let _ = search_state.update(cx, |_, cx| cx.notify());
+                                                                });
+                                                            })));
+
                                                             cx.notify();
                                                         });
                                                     }
                                                 }))
-                                        )
-                                )
+                                        )                                )
                         )
                 )
                 .child(section_header("Developer", sub_text))

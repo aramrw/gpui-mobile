@@ -66,6 +66,8 @@ impl IntoElement for PopupModal {
             ModalPosition::Bottom => px(80.0),
         };
 
+        let on_close = self.on_close.clone();
+
         // Root container for the entire modal system
         div()
             .id("popup-modal-root")
@@ -74,7 +76,8 @@ impl IntoElement for PopupModal {
             .left_0()
             .size_full()
             .child(
-                // BACKDROP LAYER: Sibling behind the content
+                // 1. BACKDROP LAYER: Sibling behind the content.
+                // This covers the WHOLE screen and handles closing.
                 div()
                     .id("modal-backdrop")
                     .absolute()
@@ -83,15 +86,18 @@ impl IntoElement for PopupModal {
                     .size_full()
                     .bg(rgba(0x000000_66))
                     .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                        // Clicking the backdrop hides keyboard and closes modal
+                        log::info!("PopupModal: Backdrop mouse_down");
                         crate::hide_keyboard();
-                        if let Some(handler) = &self.on_close {
+                        if let Some(handler) = &on_close {
                             (handler)(window, cx);
                         }
                     })
             )
             .child(
-                // CONTENT LAYER: Sibling in front of the backdrop
+                // 2. CONTENT LAYER: Sibling in front of the backdrop.
+                // This layer is NOT interactive itself (doesn't have a handler),
+                // so it doesn't catch clicks that should go to the backdrop.
+                // But it positions the content box.
                 div()
                     .id("modal-content-layer")
                     .absolute()
@@ -109,11 +115,15 @@ impl IntoElement for PopupModal {
                     .when(self.position == ModalPosition::Top, |this: Stateful<gpui::Div>| this.pt(margin))
                     .when(self.position == ModalPosition::Bottom, |this: Stateful<gpui::Div>| this.pb(margin))
                     .child(
-                        // The actual content box
+                        // The actual content box: Since its parent (content-layer) 
+                        // doesn't have an on_mouse_down, clicks here won't bubble 
+                        // to any close handler in the content-layer.
+                        // And since it's a SIBLING of the backdrop, clicks here 
+                        // won't bubble to the backdrop either.
                         div()
                             .id("modal-content-box")
-                            .on_mouse_down(MouseButton::Left, |_, _, _| {
-                                // CONSUME EVENT: Stop propagation to backdrop
+                            .on_mouse_down(MouseButton::Left, move |_, _, _| {
+                                log::info!("PopupModal: Content box mouse_down (stopping propagation)");
                             })
                             .child(self.child.unwrap_or_else(|| div().into_any_element()))
                     )
