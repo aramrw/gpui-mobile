@@ -63,6 +63,8 @@ extern crate gpui_mobile;
 pub mod demos;
 pub mod screens;
 
+#[cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))]
+use gpui::{App, AppContext};
 #[cfg(any(target_os = "ios", target_os = "android"))]
 use gpui::{prelude::*, App, WindowOptions};
 
@@ -77,10 +79,10 @@ use yomichan_rs::Yomichan;
 
 // --- New Global Definition ---
 #[derive(Clone)]
-pub struct GlobalYomichan(pub Arc<parking_lot::RwLock<Yomichan<'static>>>);
+pub struct GlobalYomichan(pub Arc<parking_lot::RwLock<Yomichan>>);
 impl gpui::Global for GlobalYomichan {}
 impl std::ops::Deref for GlobalYomichan {
-    type Target = Arc<parking_lot::RwLock<Yomichan<'static>>>;
+    type Target = Arc<parking_lot::RwLock<Yomichan>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -225,13 +227,17 @@ pub fn ios_main() {
 ///
 /// If the app was launched via a deeplink (e.g. `gpui://video_player`),
 /// the router starts on the corresponding screen.
-#[cfg(any(target_os = "ios", target_os = "android"))]
-fn open_main_window(cx: &mut App) {
+#[cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))]
+pub fn open_main_window(cx: &mut App) {
     // Set up HTTP client so gpui::img() can fetch remote images (e.g. picsum.photos).
     // We build the reqwest client ourselves so we can skip TLS cert verification.
     // On iOS, rustls-native-certs fails to load system root certs, causing all
     // HTTPS requests to fail with "UnknownIssuer". Since this is a demo app,
     // disabling cert verification is acceptable.
+
+    use gpui::WindowOptions;
+
+    use crate::screens::Router;
     log::info!("Setting up HTTP client for image loading...");
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
@@ -257,7 +263,7 @@ fn open_main_window(cx: &mut App) {
     
     // Ensure default language is set to avoid panics
     {
-        let mut ycd: parking_lot::RwLockWriteGuard<yomichan_rs::Yomichan<'static>> = yomichan_lock.write();
+        let mut ycd: parking_lot::RwLockWriteGuard<yomichan_rs::Yomichan> = yomichan_lock.write();
         let current_lang = {
             let opts_ptr = ycd.options();
             let opts = opts_ptr.read();

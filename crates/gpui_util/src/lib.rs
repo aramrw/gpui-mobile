@@ -12,6 +12,7 @@ use std::{
 };
 
 pub mod arc_cow;
+pub mod command;
 
 pub fn post_inc<T: From<u8> + AddAssign<T> + Copy>(value: &mut T) -> T {
     let prev = *value;

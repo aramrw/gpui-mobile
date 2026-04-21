@@ -361,6 +361,11 @@ pub mod ios;
 #[cfg(target_os = "android")]
 pub mod android;
 
+#[cfg(target_os = "macos")]
+pub mod macos {
+    pub use gpui_macos::*;
+}
+
 // ── public re-exports ────────────────────────────────────────────────────────
 
 #[cfg(target_os = "ios")]
@@ -368,6 +373,11 @@ pub use ios::{current_platform, IosPlatform};
 
 #[cfg(target_os = "android")]
 pub use android::{current_platform, AndroidPlatform};
+
+#[cfg(target_os = "macos")]
+pub fn current_platform(headless: bool) -> std::rc::Rc<dyn gpui::Platform> {
+    std::rc::Rc::new(macos::MacPlatform::new(headless))
+}
 
 pub use target_platform::{TargetPlatform, target_platform, DEFAULT_PLATFORM};
 
@@ -380,10 +390,10 @@ pub use target_platform::{TargetPlatform, target_platform, DEFAULT_PLATFORM};
 ///
 /// When compiled for iOS, returns an `Rc<dyn gpui::Platform>` backed by `IosPlatform`.
 /// When compiled for Android, returns an `Rc<dyn gpui::Platform>` backed by `AndroidPlatform`.
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
 pub fn current_platform(_headless: bool) -> ! {
     panic!(
         "gpui-mobile: `current_platform` is only available when compiled for \
-         `target_os = \"ios\"` or `target_os = \"android\"`."
+         `target_os = \"ios\"`, `target_os = \"android\"` or `target_os = \"macos\"`."
     );
 }

@@ -21,6 +21,8 @@
 //! cargo ndk -t arm64-v8a build -p gpui-mobile-example
 //! ```
 
+pub mod gpui_platform;
+
 #[cfg(target_os = "ios")]
 fn main() {
     gpui_mobile_example::ios_main();
@@ -38,8 +40,34 @@ fn main() {
 fn main() {
     // Allow `cargo check` / `cargo clippy` on the host (macOS / Linux) to
     // succeed without requiring a mobile target.
+
+    use gpui::{App, Application};
+    use gpui_mobile_example::open_main_window;
     eprintln!(
         "This example is designed for iOS and Android. \
          Please build with --target aarch64-apple-ios-sim (iOS) or via cargo-ndk (Android)."
     );
+    let current_platform = gpui_platform::current_platform(false);
+
+    Application::with_platform(current_platform).run(|cx: &mut App| {
+        open_main_window(cx);
+    });
+
+    // Application::with_platform(current_platform).run(|cx: &mut App| {
+    //     use gpui::{Bounds, WindowBounds, WindowOptions, prelude::*, px, size};
+    //
+    //     let bounds = Bounds::centered(None, size(px(600.0), px(600.0)), cx);
+    //     cx.open_window(
+    //         WindowOptions {
+    //             window_bounds: Some(WindowBounds::Windowed(bounds)),
+    //             ..Default::default()
+    //         },
+    //         |_window, cx| cx.new(|_cx| {
+    //             //
+    //         }),
+    //     )
+    //     .unwrap();
+    //
+    //     cx.activate(true);
+    // });
 }
