@@ -1,13 +1,14 @@
 use gpui::{
-    div, rgb, App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, Task, WeakEntity, SharedString, px, MouseDownEvent,
+    div, px, rgb, App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement,
+    MouseDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Task,
+    WeakEntity,
 };
 use gpui_mobile::components::material::search_bar::SearchBar;
-use gpui_mobile::components::material::{MaterialTheme, SelectableTextView, Dropdown, TextField};
+use gpui_mobile::components::material::{Dropdown, MaterialTheme, SelectableTextView, TextField};
 use gpui_mobile::{set_text_input_callback, show_keyboard};
 use regex::Regex;
-use std::sync::LazyLock;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use yomichan_rs::TermSearchResultsSegment;
 
 use super::Router;
@@ -84,12 +85,12 @@ impl SearchState {
     }
 
     pub fn get_or_create_view(
-        &mut self, 
-        key: &str, 
-        text: SharedString, 
-        theme: MaterialTheme, 
+        &mut self,
+        key: &str,
+        text: SharedString,
+        theme: MaterialTheme,
         lookup_handler: impl Fn(&str, &mut App) + 'static,
-        cx: &mut impl AppContext
+        cx: &mut impl AppContext,
     ) -> Entity<SelectableTextView> {
         if let Some(view) = self.view_cache.get(key) {
             return view.clone();
@@ -107,13 +108,21 @@ impl SearchState {
 
 pub fn render(
     search_state: &Entity<SearchState>,
-    router: &Router,
-    cx: &mut Context<Router>,
+    router_handle: Entity<super::Router>,
+    router: &super::Router,
+    cx: &mut Context<super::Router>,
 ) -> impl IntoElement {
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
 
-    let (query, cursor_pos, focused, results, selected_index, profile_open): (String, usize, bool, Option<Vec<TermSearchResultsSegment>>, Option<usize>, bool) = {
+    let (query, cursor_pos, focused, results, selected_index, profile_open): (
+        String,
+        usize,
+        bool,
+        Option<Vec<TermSearchResultsSegment>>,
+        Option<usize>,
+        bool,
+    ) = {
         let state = search_state.read(cx);
         (
             state.query.text.clone(),
@@ -130,9 +139,15 @@ pub fn render(
         let ycd = global_yomichan.read();
         let opts_ptr = ycd.options();
         let opts = opts_ptr.read();
-        (opts.profiles.keys().cloned().collect::<Vec<String>>(), opts.current_profile)
+        (
+            opts.profiles.keys().cloned().collect::<Vec<String>>(),
+            opts.current_profile,
+        )
     };
-    let current_profile_name = profiles.get(current_profile_idx).cloned().unwrap_or_else(|| "Default".to_string());
+    let current_profile_name = profiles
+        .get(current_profile_idx)
+        .cloned()
+        .unwrap_or_else(|| "Default".to_string());
 
     let search_state_handle = search_state.clone();
     let search_state_handle_for_trailing = search_state.clone();
@@ -150,11 +165,14 @@ pub fn render(
                 .query(query.clone())
                 .cursor(cursor_pos)
                 .focused(focused)
-                .placeholder("Search term...")
                 .leading_element({
                     let mut dropdown = Dropdown::new(
-                        current_profile_name.chars().next().unwrap_or('P').to_string(),
-                        theme
+                        current_profile_name
+                            .chars()
+                            .next()
+                            .unwrap_or('P')
+                            .to_string(),
+                        theme,
                     )
                     .open(profile_open)
                     .on_toggle(cx.listener({
@@ -166,12 +184,17 @@ pub fn render(
                             });
                         }
                     }));
-                    
+
                     for name in &profiles {
                         let name_clone = name.clone();
                         let search_state = search_state.clone();
+                        let router_handle = router_handle.clone();
                         dropdown = dropdown.item(name, move |_, _, cx| {
-                            super::settings::SettingsState::switch_profile(name_clone.clone(), cx);
+                            super::settings::SettingsState::switch_profile(
+                                name_clone.clone(),
+                                &router_handle,
+                                cx,
+                            );
                             let _ = search_state.update(cx, |state, cx| {
                                 state.profile_dropdown_open = false;
                                 state.view_cache.clear();
@@ -184,18 +207,19 @@ pub fn render(
                 .on_tap(cx.listener(move |_, event: &MouseDownEvent, _, cx| {
                     let search_state_handle = search_state_handle.clone();
                     let async_cx = cx.to_async();
-                    
+
                     // Position cursor accurately from tap
                     let _ = search_state_handle.update(cx, |state, cx| {
                         state.focused = true;
                         // SearchBar text starts at approx x=56 (icon + gap)
                         let text_x = event.position.x.as_f32() - 56.0;
-                        state.query.cursor = gpui_mobile::components::material::text_input::calculate_cursor_offset(
-                            &state.query.text,
-                            px(16.0).into(), // SearchBar text is base size
-                            text_x,
-                            cx
-                        );
+                        state.query.cursor =
+                            gpui_mobile::components::material::text_input::calculate_cursor_offset(
+                                &state.query.text,
+                                px(16.0).into(), // SearchBar text is base size
+                                text_x,
+                                cx,
+                            );
                         cx.notify();
                     });
 
@@ -273,7 +297,12 @@ pub fn render(
                                     ));
                                 }
                             }
-                            div().flex().flex_col().gap_1().px_2().children(dictionary_entries)
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .px_2()
+                                .children(dictionary_entries)
                         } else {
                             div().px_4().child("Select a word above")
                         }
@@ -285,6 +314,20 @@ pub fn render(
                 }),
         )
 }
+
+struct SegmentSelector {
+    search_state: Entity<SearchState>,
+    segments: Vec<TermSearchResultsSegment>,
+}
+impl SegmentSelector {
+    fn new(search_state: &Entity<SearchState>, segments: Vec<TermSearchResultsSegment>) -> Self {
+        Self {
+            search_state: search_state.clone(),
+            segments,
+        }
+    }
+}
+// impl Render for SegmentSelector {}
 
 fn render_segment_selector(
     search_state: &Entity<SearchState>,
@@ -378,7 +421,7 @@ fn render_dictionary_entry(
             let lookup_handler = lookup_handler.clone();
             let key = format!("entry-{}-def-{}-gloss-{}", entry_idx, def_idx, gloss_idx);
             let text = SharedString::from(gloss.plain_text.clone());
-            
+
             let view = search_state_handle.update(cx, |state: &mut SearchState, cx| {
                 state.get_or_create_view(&key, text, theme, lookup_handler, cx)
             });
@@ -390,20 +433,32 @@ fn render_dictionary_entry(
                     .flex_wrap()
                     .text_lg()
                     .text_color(rgb(theme.on_surface))
-                    .child(view)
+                    .child(view),
             );
         }
     }
 
     let reading_key = format!("entry-{}-reading", entry_idx);
     let term_key = format!("entry-{}-term", entry_idx);
-    
+
     let reading_view = search_state_handle.update(cx, |state: &mut SearchState, cx| {
-        state.get_or_create_view(&reading_key, SharedString::from(reading), theme, lookup_handler.clone(), cx)
+        state.get_or_create_view(
+            &reading_key,
+            SharedString::from(reading),
+            theme,
+            lookup_handler.clone(),
+            cx,
+        )
     });
-    
+
     let term_view = search_state_handle.update(cx, |state: &mut SearchState, cx| {
-        state.get_or_create_view(&term_key, SharedString::from(term), theme, lookup_handler.clone(), cx)
+        state.get_or_create_view(
+            &term_key,
+            SharedString::from(term),
+            theme,
+            lookup_handler.clone(),
+            cx,
+        )
     });
 
     div()

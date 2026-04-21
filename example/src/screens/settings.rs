@@ -22,7 +22,7 @@ impl SettingsState {
         }
     }
 
-    pub fn switch_profile(name: String, cx: &mut gpui::App) {
+    pub fn switch_profile(name: String, router: &Entity<super::Router>, cx: &mut gpui::App) {
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         {
             let ycd = global_yomichan.read();
@@ -35,6 +35,15 @@ impl SettingsState {
             }
             let _ = ycd.update_options();
         }
+        
+        // Clear search view cache to ensure it re-renders with new profile settings
+        let _ = router.update(cx, |r, cx| {
+            let _ = r.search_state.update(cx, |s, cx| {
+                s.view_cache.clear();
+                cx.notify();
+            });
+            cx.notify();
+        });
     }
 
     pub fn add_profile(&mut self, cx: &mut Context<Self>) {
@@ -87,7 +96,12 @@ impl SettingsState {
     }
 }
 
-pub fn render(state: &Entity<SettingsState>, search_state: &Entity<super::search::SearchState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
+pub fn render(
+    state: &Entity<SettingsState>,
+    router_handle: Entity<super::Router>,
+    router: &super::Router,
+    cx: &mut Context<super::Router>,
+) -> impl IntoElement {
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
     let text_color = theme.on_surface;
@@ -193,8 +207,9 @@ pub fn render(state: &Entity<SettingsState>, search_state: &Entity<super::search
                                             for name in &profiles {
                                                 let name_clone = name.clone();
                                                 let state = state.clone();
+                                                let router_handle = router_handle.clone();
                                                 dropdown = dropdown.item(name, move |_, _, cx| {
-                                                    SettingsState::switch_profile(name_clone.clone(), cx);
+                                                    SettingsState::switch_profile(name_clone.clone(), &router_handle, cx);
                                                     let _ = state.update(cx, |s, cx| {
                                                         s.profile_dropdown_open = false;
                                                         cx.notify();
@@ -207,7 +222,7 @@ pub fn render(state: &Entity<SettingsState>, search_state: &Entity<super::search
                                             FilledTonalButton::new("+", theme)
                                                 .on_click(cx.listener({
                                                     let state = state.clone();
-                                                    let search_state = search_state.clone();
+                                                    let router_handle = router_handle.clone();
                                                     move |_, _, _, cx| {
                                                         let async_cx = cx.to_async();
                                                         state.update(cx, |s, cx| {
@@ -217,10 +232,10 @@ pub fn render(state: &Entity<SettingsState>, search_state: &Entity<super::search
                                                             gpui_mobile::show_keyboard();
 
                                                             let state = state.clone();
-                                                            let search_state = search_state.clone();
+                                                            let router_handle = router_handle.clone();
                                                             gpui_mobile::set_text_input_callback(Some(Box::new(move |text| {
                                                                 let state = state.clone();
-                                                                let search_state = search_state.clone();
+                                                                let router_handle = router_handle.clone();
                                                                 let text = text.to_string();
                                                                 let _ = async_cx.update(move |cx| {
                                                                     let _ = state.update(cx, |s, cx| {
@@ -231,7 +246,10 @@ pub fn render(state: &Entity<SettingsState>, search_state: &Entity<super::search
                                                                         }
                                                                         cx.notify();
                                                                     });
-                                                                    let _ = search_state.update(cx, |_, cx| cx.notify());
+                                                                    let _ = router_handle.update(cx, |r, cx| {
+                                                                        let _ = r.search_state.update(cx, |_, cx| cx.notify());
+                                                                        cx.notify();
+                                                                    });
                                                                 });
                                                             })));
 
@@ -265,11 +283,16 @@ pub fn render(state: &Entity<SettingsState>, search_state: &Entity<super::search
                 )
         )
         .when(show_modal, |this| {
-            this.child(render_add_profile_modal(state, search_state, theme, cx))
+            this.child(render_add_profile_modal(state, router_handle, theme, cx))
         })
 }
 
-fn render_add_profile_modal(state: &Entity<SettingsState>, search_state: &Entity<super::search::SearchState>, theme: MaterialTheme, cx: &mut Context<Router>) -> impl IntoElement {
+fn render_add_profile_modal(
+    state: &Entity<SettingsState>,
+    router_handle: Entity<super::Router>,
+    theme: MaterialTheme,
+    cx: &mut Context<Router>,
+) -> impl IntoElement {
     let state_read = state.read(cx);
     let name_value = state_read.new_profile_name.text.clone();
     let cursor_pos = state_read.new_profile_name.cursor;
@@ -304,11 +327,11 @@ fn render_add_profile_modal(state: &Entity<SettingsState>, search_state: &Entity
                         .focused(true)
                         .on_tap_notify({
                             let state = state.clone();
-                            let search_state = search_state.clone();
+                            let router_handle = router_handle.clone();
                             let async_cx = cx.to_async();
                             move |event, cx| {
                                 let state = state.clone();
-                                let search_state = search_state.clone();
+                                let router_handle = router_handle.clone();
                                 let async_cx = async_cx.clone();
                                 
                                 // Position cursor
@@ -325,7 +348,7 @@ fn render_add_profile_modal(state: &Entity<SettingsState>, search_state: &Entity
                                 gpui_mobile::show_keyboard_with_type(KeyboardType::Default);
                                 gpui_mobile::set_text_input_callback(Some(Box::new(move |text| {
                                     let state = state.clone();
-                                    let search_state = search_state.clone();
+                                    let router_handle = router_handle.clone();
                                     let text = text.to_string();
                                     let _ = async_cx.update(move |cx| {
                                         let _ = state.update(cx, |s, cx| {
@@ -336,7 +359,10 @@ fn render_add_profile_modal(state: &Entity<SettingsState>, search_state: &Entity
                                             }
                                             cx.notify();
                                         });
-                                        let _ = search_state.update(cx, |_, cx| cx.notify());
+                                        let _ = router_handle.update(cx, |r, cx| {
+                                            let _ = r.search_state.update(cx, |_, cx| cx.notify());
+                                            cx.notify();
+                                        });
                                     });
                                 })));
                             }

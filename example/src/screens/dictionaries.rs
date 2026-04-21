@@ -6,7 +6,7 @@ use gpui_mobile::components::material::MaterialTheme;
 use gpui_mobile::packages::file_selector::{open_file, OpenFileOptions, TypeGroup};
 use crate::GlobalYomichan;
 use super::Router;
-use yomichan_rs::settings::DictionaryOptions;
+use yomichan_rs::settings::core::DictionaryOptions;
 use std::path::PathBuf;
 
 pub struct DictionariesState {}

@@ -620,7 +620,7 @@ impl Router {
     // ── Per-screen render helpers ────────────────────────────────────────────
 
     fn render_search_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        search::render(&self.search_state, self, cx)
+        search::render(&self.search_state, cx.entity().clone(), self, cx)
     }
 
     fn render_dictionaries_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -628,7 +628,7 @@ impl Router {
     }
 
     fn render_settings_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        settings::render(&self.settings_state, &self.search_state, self, cx)
+        settings::render(&self.settings_state, cx.entity().clone(), self, cx)
     }
 
     fn render_home_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {

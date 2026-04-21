@@ -90,6 +90,12 @@ impl<'a> From<Cow<'a, str>> for ArcCow<'a, str> {
     }
 }
 
+impl From<compact_str::CompactString> for ArcCow<'static, str> {
+    fn from(value: compact_str::CompactString) -> Self {
+        Self::Owned(value.to_string().into())
+    }
+}
+
 impl<T> From<Vec<T>> for ArcCow<'_, [T]> {
     fn from(vec: Vec<T>) -> Self {
         ArcCow::Owned(Arc::from(vec))

@@ -417,7 +417,6 @@ impl IntoElement for SearchBar {
                     .child(query_text.clone())
             }
         } else {
-            let placeholder_text = self.placeholder.as_deref().unwrap_or("Search").to_string();
             let mut row = div()
                 .flex_1()
                 .flex()
@@ -426,8 +425,8 @@ impl IntoElement for SearchBar {
                 .text_base()
                 .line_height(px(24.0))
                 .text_color(on_surface_variant)
-                .overflow_hidden()
-                .child(placeholder_text);
+                .overflow_hidden();
+                //.child(placeholder_text);
 
             if self.focused {
                 row = row.child(
