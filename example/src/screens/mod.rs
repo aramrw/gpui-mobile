@@ -201,9 +201,13 @@ pub struct Router {
     // ── Yomichan state ───────────────────────────────────────────────────
     pub search_state: Entity<search::SearchState>,
     pub dictionaries_state: Entity<dictionaries::DictionariesState>,
-    pub settings_state: Entity<settings::SettingsState>,
+    settings_state: Entity<settings::SettingsState>,
+
+    /// Monokakido-style zoom header.
+    zoom_header: Entity<gpui_mobile::components::material::ZoomHeader>,
 
     // ── Demo view state ──────────────────────────────────────────────────
+
     /// The animation playground demo (lazily created when the screen is visited).
     animation_playground: Option<AnimationPlayground>,
     /// The shader showcase demo (lazily created when the screen is visited).
@@ -238,6 +242,9 @@ impl Router {
         let search_state = cx.new(|cx| search::SearchState::new(window, cx));
         let dictionaries_state = cx.new(|cx| dictionaries::DictionariesState::new(window, cx));
         let settings_state = cx.new(|cx| settings::SettingsState::new(window, cx));
+        let zoom_header = cx.new(|_cx| {
+            gpui_mobile::components::material::ZoomHeader::new(MaterialTheme::from_appearance(true))
+        });
 
         Self {
             current_screen: screen,
@@ -250,6 +257,7 @@ impl Router {
             search_state,
             dictionaries_state,
             settings_state,
+            zoom_header,
             animation_playground: None,
             shader_showcase: None,
         }
@@ -388,6 +396,12 @@ impl Render for Router {
 
         let show_tab_bar = self.current_screen.is_tab_root();
         let theme = gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
+        
+        // Sync zoom header theme
+        let _ = self.zoom_header.update(cx, |this, cx| {
+            this.set_theme(theme, cx);
+        });
+
         let bg_color = theme.surface;
         let text_color = theme.on_surface;
         let safe_top = self.safe_area.top;
@@ -423,6 +437,8 @@ impl Render for Router {
             .when(safe_bottom > 0.0 && show_tab_bar, |d| {
                 d.child(div().w_full().h(px(safe_bottom)).bg(rgb(bottom_color)))
             })
+            // ── Monokakido Zoom Header (Last child = Highest Z-Index) ─────
+            .child(self.zoom_header.clone())
             .into_any_element()
     }
 }
@@ -604,7 +620,7 @@ impl Router {
     // ── Per-screen render helpers ────────────────────────────────────────────
 
     fn render_search_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        search::render(&self.search_state, self, cx)
+        search::render(&self.search_state, cx.entity().clone(), self, cx)
     }
 
     fn render_dictionaries_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -612,7 +628,7 @@ impl Router {
     }
 
     fn render_settings_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        settings::render(&self.settings_state, self, cx)
+        settings::render(&self.settings_state, cx.entity().clone(), self, cx)
     }
 
     fn render_home_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {

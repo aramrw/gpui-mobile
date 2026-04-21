@@ -10,6 +10,8 @@
 //! whose view hosts a CAMetalLayer. Rendering is performed by
 //! `gpui_wgpu::WgpuRenderer` which drives wgpu over the Metal backend.
 
+#![allow(unexpected_cfgs)]
+
 use super::events::*;
 use super::IosDisplay;
 use crate::momentum::{MomentumScroller, VelocityTracker};
@@ -264,9 +266,18 @@ fn register_text_input_view_class() -> &'static Class {
                     let window = &*(window_ptr as *const IosWindow);
                     window.handle_delete_backward();
                 }
-                // Call super
+                
+                // Call super - this deletes our dummy character
                 let superclass = class!(UITextField);
                 let _: () = msg_send![super(this, superclass), deleteBackward];
+
+                // Reset to dummy character so next backspace also works
+                let dummy: *mut Object = msg_send![class!(NSString), alloc];
+                let dummy: *mut Object = msg_send![dummy, initWithBytes: " ".as_ptr()
+                    length: 1
+                    encoding: 4
+                ];
+                let _: () = msg_send![this, setText: dummy];
             }
         }
 
@@ -310,14 +321,44 @@ fn register_text_input_view_class() -> &'static Class {
                 let utf8: *const i8 = msg_send![text, UTF8String];
                 if !utf8.is_null() {
                     let text_str = std::ffi::CStr::from_ptr(utf8).to_string_lossy();
-                    if !text_str.is_empty() {
-                        log::info!("GPUI iOS: Text finalized: {:?}", text_str);
-                        window.handle_text_input(text);
+                    
+                    // If text is empty, deleteBackward was likely called (and handled
+                    // separately). We just need to reset the dummy character.
+                    if text_str.is_empty() {
+                        let dummy: *mut Object = msg_send![class!(NSString), alloc];
+                        let dummy: *mut Object = msg_send![dummy, initWithBytes: " ".as_ptr()
+                            length: 1
+                            encoding: 4
+                        ];
+                        let _: () = msg_send![this, setText: dummy];
+                        return;
+                    }
 
-                        // Clear the field so it's ready for the next input
-                        let empty_string: *mut Object = msg_send![class!(NSString), alloc];
-                        let empty_string: *mut Object = msg_send![empty_string, init];
-                        let _: () = msg_send![this, setText: empty_string];
+                    // If text is still just the dummy space, do nothing.
+                    if text_str == " " {
+                        return;
+                    }
+
+                    // Something was entered. Find what was added relative to " ".
+                    // We assume it was appended or replaced the space.
+                    let final_text = if text_str.starts_with(' ') {
+                        &text_str[1..]
+                    } else {
+                        &text_str
+                    };
+
+                    if !final_text.is_empty() {
+                        log::info!("GPUI iOS: Text finalized: {:?}", final_text);
+                        // We use handle_text_input_str to pass the cleaned string
+                        window.handle_text_input_str(final_text);
+
+                        // Reset to dummy character
+                        let dummy: *mut Object = msg_send![class!(NSString), alloc];
+                        let dummy: *mut Object = msg_send![dummy, initWithBytes: " ".as_ptr()
+                            length: 1
+                            encoding: 4
+                        ];
+                        let _: () = msg_send![this, setText: dummy];
                     }
                 }
             }
@@ -394,10 +435,19 @@ enum TouchState {
     /// No active touch.
     Idle,
     /// Finger is down but hasn't moved beyond the slop threshold.
-    Pending { start_x: f32, start_y: f32 },
+    Pending {
+        start_x: f32,
+        start_y: f32,
+        start_time: std::time::Instant,
+    },
     /// Finger has moved beyond the threshold — we are scrolling.
     Scrolling { prev_x: f32, prev_y: f32 },
+    /// Finger was held down for > 200ms without moving.
+    LongPressed,
 }
+
+/// Threshold for long-press detection (Monokakido-style).
+const LONG_PRESS_THRESHOLD: std::time::Duration = std::time::Duration::from_millis(200);
 
 pub(crate) struct IosWindow {
     /// The UIWindow object
@@ -532,6 +582,16 @@ impl IosWindow {
 
             let _: () = msg_send![text_input_view, setUserInteractionEnabled: YES];
             let _: () = msg_send![view, addSubview: text_input_view];
+
+            // Set initial text to a dummy character (" ") so that deleteBackward is
+            // called repeatedly when the user holds the backspace key (iOS doesn't
+            // call deleteBackward if the text field is empty).
+            let dummy_string: *mut Object = msg_send![class!(NSString), alloc];
+            let dummy_string: *mut Object = msg_send![dummy_string, initWithBytes: " ".as_ptr()
+                length: 1
+                encoding: 4 // NSUTF8StringEncoding
+            ];
+            let _: () = msg_send![text_input_view, setText: dummy_string];
 
             // --- Initialise the wgpu renderer (Metal backend) ---------------
             let pixel_w = (screen_bounds_cg.size.width * scale) as i32;
@@ -784,26 +844,26 @@ impl IosWindow {
                 ts = TouchState::Pending {
                     start_x: logical_x,
                     start_y: logical_y,
+                    start_time: std::time::Instant::now(),
                 };
                 // Do NOT emit MouseDown here — wait until we know whether
-                // this is a tap or a scroll.  Emitting MouseDown immediately
-                // causes accidental navigation when the user starts scrolling
-                // near a button/tab.
-                //
-                // - Tap (finger lifts within slop) → emit MouseDown + MouseUp
-                //   together in Ended phase.
-                // - Scroll (finger exceeds slop) → emit only MouseMove +
-                //   ScrollWheel, no MouseDown.
+                // this is a tap, a scroll, or a long-press.
             }
 
-            UITouchPhase::Moved => {
+            UITouchPhase::Moved | UITouchPhase::Stationary => {
                 // Record every move for velocity estimation.
-                self.velocity_tracker
-                    .borrow_mut()
-                    .record(logical_x, logical_y);
+                if phase == UITouchPhase::Moved {
+                    self.velocity_tracker
+                        .borrow_mut()
+                        .record(logical_x, logical_y);
+                }
 
                 match ts {
-                    TouchState::Pending { start_x, start_y } => {
+                    TouchState::Pending {
+                        start_x,
+                        start_y,
+                        start_time,
+                    } => {
                         let dx = logical_x - start_x;
                         let dy = logical_y - start_y;
                         let distance = (dx * dx + dy * dy).sqrt();
@@ -824,10 +884,21 @@ impl IosWindow {
                                 modifiers,
                                 touch_phase: gpui::TouchPhase::Started,
                             }));
+                        } else if start_time.elapsed() > LONG_PRESS_THRESHOLD {
+                            // Promote to long-press — emit a special mouse down.
+                            // We use Button::Other(255) as a sentinel for Monokakido selection.
+                            ts = TouchState::LongPressed;
+                            log::info!("GPUI iOS: LongPress detected at ({}, {}). Emitting MouseDown(Right)", logical_x, logical_y);
+                            emit(PlatformInput::MouseDown(gpui::MouseDownEvent {
+                                button: gpui::MouseButton::Right,
+                                position,
+                                modifiers,
+                                click_count: 1,
+                                first_mouse: false,
+                            }));
                         }
                         // Always emit MouseMove so interactive screens can
-                        // track finger position (e.g. drag line in Animations,
-                        // gradient control in Shaders).
+                        // track finger position.
                         emit(PlatformInput::MouseMove(gpui::MouseMoveEvent {
                             position,
                             modifiers,
@@ -835,27 +906,37 @@ impl IosWindow {
                         }));
                     }
                     TouchState::Scrolling { prev_x, prev_y } => {
-                        let dx = logical_x - prev_x;
-                        let dy = logical_y - prev_y;
-                        ts = TouchState::Scrolling {
-                            prev_x: logical_x,
-                            prev_y: logical_y,
-                        };
-                        // Scroll event for scrollable containers.
-                        emit(PlatformInput::ScrollWheel(gpui::ScrollWheelEvent {
-                            position,
-                            delta: gpui::ScrollDelta::Pixels(gpui::point(
-                                gpui::px(dx),
-                                gpui::px(dy),
-                            )),
-                            modifiers,
-                            touch_phase: gpui::TouchPhase::Moved,
-                        }));
+                        if phase == UITouchPhase::Moved {
+                            let dx = logical_x - prev_x;
+                            let dy = logical_y - prev_y;
+                            ts = TouchState::Scrolling {
+                                prev_x: logical_x,
+                                prev_y: logical_y,
+                            };
+                            // Scroll event for scrollable containers.
+                            emit(PlatformInput::ScrollWheel(gpui::ScrollWheelEvent {
+                                position,
+                                delta: gpui::ScrollDelta::Pixels(gpui::point(
+                                    gpui::px(dx),
+                                    gpui::px(dy),
+                                )),
+                                modifiers,
+                                touch_phase: gpui::TouchPhase::Moved,
+                            }));
+                        }
                         // MouseMove for interactive screens.
                         emit(PlatformInput::MouseMove(gpui::MouseMoveEvent {
                             position,
                             modifiers,
                             pressed_button: Some(gpui::MouseButton::Left),
+                        }));
+                    }
+                    TouchState::LongPressed => {
+                        // Already in selection mode. Emit special MouseMove.
+                        emit(PlatformInput::MouseMove(gpui::MouseMoveEvent {
+                            position,
+                            modifiers,
+                            pressed_button: Some(gpui::MouseButton::Right),
                         }));
                     }
                     TouchState::Idle => {
@@ -867,11 +948,12 @@ impl IosWindow {
             UITouchPhase::Ended | UITouchPhase::Cancelled => {
                 self.touch_pressed.set(false);
                 match ts {
-                    TouchState::Pending { start_x, start_y } => {
-                        // Finger lifted without exceeding slop → tap.
-                        // Emit MouseDown + MouseUp together at the original
-                        // down position so hit-testing matches the initial
-                        // touch point.
+                    TouchState::Pending {
+                        start_x,
+                        start_y,
+                        ..
+                    } => {
+                        // Finger lifted without exceeding slop or threshold → tap.
                         self.velocity_tracker.borrow_mut().reset();
                         let tap_pos = gpui::point(gpui::px(start_x), gpui::px(start_y));
                         emit(PlatformInput::MouseDown(gpui::MouseDownEvent {
@@ -902,7 +984,7 @@ impl IosWindow {
                             touch_phase: gpui::TouchPhase::Ended,
                         }));
                         // Also emit MouseUp so interactive screens can
-                        // detect the end of a drag (e.g. fling a ball).
+                        // detect the end of a drag.
                         emit(PlatformInput::MouseUp(gpui::MouseUpEvent {
                             button: gpui::MouseButton::Left,
                             position,
@@ -910,26 +992,24 @@ impl IosWindow {
                             click_count: 1,
                         }));
 
-                        // ── Start momentum / inertia scrolling ───────────
-                        // Compute release velocity from recent touch samples
-                        // and kick off the momentum scroller.  Subsequent
-                        // frames will pump synthetic ScrollWheel events via
-                        // `pump_momentum()` until velocity decays below the
-                        // threshold.
                         let (vx, vy) = self.velocity_tracker.borrow().velocity();
                         self.velocity_tracker.borrow_mut().reset();
                         self.momentum_scroller
                             .borrow_mut()
                             .fling(vx, vy, logical_x, logical_y);
                     }
+                    TouchState::LongPressed => {
+                        // Selection finished. Emit special MouseUp.
+                        emit(PlatformInput::MouseUp(gpui::MouseUpEvent {
+                            button: gpui::MouseButton::Right,
+                            position,
+                            modifiers,
+                            click_count: 1,
+                        }));
+                    }
                     TouchState::Idle => {}
                 }
                 ts = TouchState::Idle;
-            }
-
-            UITouchPhase::Stationary => {
-                // No change — ignore.
-                return;
             }
         }
 
@@ -1079,39 +1159,34 @@ impl IosWindow {
         }
     }
 
-    /// Handle text input from the software keyboard
+    /// Handle text input from the software keyboard (NSString version for FFI)
     pub fn handle_text_input(&self, text: *mut Object) {
         if text.is_null() {
             return;
         }
 
         unsafe {
-            // Convert NSString to Rust String
             let utf8: *const i8 = msg_send![text, UTF8String];
-            if utf8.is_null() {
-                return;
+            if !utf8.is_null() {
+                let text_str = std::ffi::CStr::from_ptr(utf8).to_string_lossy();
+                self.handle_text_input_str(&text_str);
             }
+        }
+    }
 
-            let text_str = std::ffi::CStr::from_ptr(utf8)
-                .to_string_lossy()
-                .into_owned();
+    /// Handle text input from the software keyboard
+    pub fn handle_text_input_str(&self, text_str: &str) {
+        log::info!("GPUI iOS: Text input: {:?}", text_str);
 
-            /// PROBLEM: The "Text Finalized" log that prints in the
-            /// "fn on_editing_changed" fn correctly prints out the real text.
-            /// turning the string into rust also isnt a problem, its the same japanese
-            /// basically that log and this log is identical, which is good up till here
-            log::info!("GPUI iOS: Text input: {:?}", text_str);
+        // Try the global text input callback (for our TextInput components).
+        // The text is captured in PENDING_TEXT regardless of whether we also
+        // send key events below.
+        let dispatched = crate::dispatch_text_input(text_str);
 
-            // Try the global text input callback (for our TextInput components).
-            // The text is captured in PENDING_TEXT regardless of whether we also
-            // send key events below.
-            let dispatched = crate::dispatch_text_input(&text_str);
-
-            // Try the input handler (for GPUI's built-in text fields)
-            if !dispatched {
-                if let Some(handler) = self.input_handler.borrow_mut().as_mut() {
-                    handler.replace_text_in_range(None, &text_str);
-                }
+        // Try the input handler (for GPUI's built-in text fields)
+        if !dispatched {
+            if let Some(handler) = self.input_handler.borrow_mut().as_mut() {
+                handler.replace_text_in_range(None, text_str);
             }
         }
     }
@@ -1155,51 +1230,65 @@ impl IosWindow {
         // gpui_ios_handle_key_event throwing rogue QWERTY characters
         // this for an actual iPhone (touchscreen), so we can
         // just kill the hardware key event handler dead in its tracks.
+        let _ = key_code;
+        let _ = modifier_flags;
+        let _ = is_key_down;
         return;
 
-        use super::text_input::{
-            key_code_to_key_down, key_code_to_key_up, key_code_to_string,
-            modifier_flags_to_modifiers,
-        };
+        #[allow(unreachable_code)]
+        {
+            use super::text_input::{
+                key_code_to_key_down, key_code_to_key_up, key_code_to_string,
+                modifier_flags_to_modifiers,
+            };
 
-        let key = key_code_to_string(key_code);
-        let modifiers = modifier_flags_to_modifiers(modifier_flags);
+            let key = key_code_to_string(key_code);
+            let modifiers = modifier_flags_to_modifiers(modifier_flags);
 
-        log::info!(
-            "GPUI iOS: Key event - key: {:?}, modifiers: {:?}, down: {}",
-            key,
-            modifiers,
-            is_key_down
-        );
+            log::info!(
+                "GPUI iOS: Key event - key: {:?}, modifiers: {:?}, down: {}",
+                key,
+                modifiers,
+                is_key_down
+            );
 
-        // On key-down, dispatch cursor-movement control codes through the
-        // global text input callback so TextField-based components receive them.
-        if is_key_down {
-            match key_code {
-                0x50 => {
-                    crate::dispatch_text_input("\x1b[D");
-                } // Left arrow
-                0x4F => {
-                    crate::dispatch_text_input("\x1b[C");
-                } // Right arrow
-                0x4A => {
-                    crate::dispatch_text_input("\x1b[H");
-                } // Home
-                0x4D => {
-                    crate::dispatch_text_input("\x1b[F");
-                } // End
-                _ => {}
+            // On key-down, dispatch cursor-movement control codes through the
+            // global text input callback so TextField-based components receive them.
+            if is_key_down {
+                match key_code {
+                    0x50 => {
+                        crate::dispatch_text_input("\x1b[D");
+                    } // Left arrow
+                    0x4F => {
+                        crate::dispatch_text_input("\x1b[C");
+                    } // Right arrow
+                    0x4A => {
+                        crate::dispatch_text_input("\x1b[H");
+                    } // Home
+                    0x4D => {
+                        crate::dispatch_text_input("\x1b[F");
+                    } // End
+                    _ => {}
+                }
             }
-        }
 
-        let event = if is_key_down {
-            key_code_to_key_down(key_code, modifier_flags)
-        } else {
-            key_code_to_key_up(key_code, modifier_flags)
-        };
+            let event = if is_key_down {
+                key_code_to_key_down(key_code, modifier_flags)
+            } else {
+                key_code_to_key_up(key_code, modifier_flags)
+            };
 
-        if let Some(callback) = self.input_callback.borrow_mut().as_mut() {
-            callback(event);
+            if let PlatformInput::KeyDown(key_down) = event {
+                let event = PlatformInput::KeyDown(gpui::KeyDownEvent {
+                    keystroke: key_down.keystroke,
+                    is_held: false,
+                    prefer_character_input: false,
+                });
+
+                if let Some(callback) = self.input_callback.borrow_mut().as_mut() {
+                    callback(event);
+                }
+            }
         }
     }
 

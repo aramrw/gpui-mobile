@@ -6,7 +6,7 @@ use gpui_mobile::components::material::MaterialTheme;
 use gpui_mobile::packages::file_selector::{open_file, OpenFileOptions, TypeGroup};
 use crate::GlobalYomichan;
 use super::Router;
-use yomichan_rs::settings::DictionaryOptions;
+use yomichan_rs::settings::core::DictionaryOptions;
 use std::path::PathBuf;
 
 pub struct DictionariesState {}
@@ -38,12 +38,10 @@ impl DictionariesState {
         }
 
         // Persist
-        cx.spawn(|_, cx: &mut AsyncApp| {
-            let cx = cx.clone();
+        cx.spawn(move |_, cx: &mut AsyncApp| {
+            let global_yomichan = global_yomichan.clone();
             async move {
-                let _ = cx.read_global(|g: &GlobalYomichan, _| {
-                    g.write().update_options()
-                });
+                let _ = global_yomichan.read().update_options();
             }
         }).detach();
         
@@ -68,8 +66,9 @@ impl DictionariesState {
         {
             let ycd = global_yomichan.write();
             let _ = ycd.set_language(&lang);
-            let _ = ycd.update_options();
         }
+        // Save after dropping the write lock
+        let _ = global_yomichan.read().update_options();
         cx.notify();
     }
 
@@ -86,35 +85,34 @@ impl DictionariesState {
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         let dictionaries_state = dictionaries_state.clone();
         
-        cx.spawn(|_, cx: &mut AsyncApp| {
+        cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
+            let global_yomichan = global_yomichan.clone();
             async move {
                 match open_file(options).await {
                     Ok(Some(file)) => {
                         let path = PathBuf::from(file.path);
                         // import_dictionaries takes a slice of paths.
                         // We run it on the background executor to avoid freezing the UI.
-                        let global_yomichan = global_yomichan.clone();
                         log::info!("Starting dictionary import for: {:?}", path);
                         
                         let weak_state = dictionaries_state.downgrade();
-                        cx.spawn(|cx: &mut AsyncApp| {
+                        cx.spawn(move |cx: &mut AsyncApp| {
                             let mut cx = cx.clone();
+                            let global_yomichan = global_yomichan.clone();
                             async move {
-                                let result = cx.background_executor().spawn(async move {
-                                    global_yomichan.read().import_dictionaries(&[path])
+                                let result = cx.background_executor().spawn({
+                                    let global_yomichan = global_yomichan.clone();
+                                    async move {
+                                        global_yomichan.read().import_dictionaries(&[path])
+                                    }
                                 }).await;
 
                                 match result {
                                     Ok(_) => {
                                         log::info!("Dictionary import completed successfully");
+                                        let _ = global_yomichan.read().update_options();
                                         weak_state.update(&mut cx, |_, cx: &mut Context<'_, DictionariesState>| {
-                                            let _ = cx.read_global(|g: &GlobalYomichan, _| {
-                                                let res = g.write().update_options();
-                                                if let Err(e) = res {
-                                                    log::error!("Failed to save settings: {}", e);
-                                                }
-                                            });
                                             cx.notify();
                                         }).ok();
                                     },

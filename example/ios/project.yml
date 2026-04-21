@@ -79,14 +79,15 @@ targets:
         VALID_ARCHS: "arm64"
         ARCHS: "arm64"
         ONLY_ACTIVE_ARCH: YES
+        "RUST_TARGET[sdk=iphonesimulator*]": aarch64-apple-ios-sim
+        "RUST_TARGET[sdk=iphoneos*]": aarch64-apple-ios
+        EXAMPLE_STATIC_LIB: "$(PROJECT_DIR)/../target/$(RUST_TARGET)/release/libgpui_mobile_example.a"
       configs:
         Debug:
-          EXAMPLE_STATIC_LIB: "$(PROJECT_DIR)/../target/aarch64-apple-ios/release/libgpui_mobile_example.a"
           GCC_OPTIMIZATION_LEVEL: "0"
           DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
           SWIFT_OPTIMIZATION_LEVEL: "-Onone"
         Release:
-          EXAMPLE_STATIC_LIB: "$(PROJECT_DIR)/../target/aarch64-apple-ios/release/libgpui_mobile_example.a"
           GCC_OPTIMIZATION_LEVEL: "s"
           DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
           SWIFT_OPTIMIZATION_LEVEL: "-O"

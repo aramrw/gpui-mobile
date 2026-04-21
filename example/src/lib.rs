@@ -1,3 +1,4 @@
+#![allow(warnings)]
 //! Cross-platform GPUI example app.
 //!
 //! This crate provides a multi-screen GPUI demo app that runs on both

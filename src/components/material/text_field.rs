@@ -137,6 +137,36 @@ impl TextField {
         &self.text[self.cursor.min(self.text.len())..]
     }
 
+    /// Start a selection at the given X coordinate.
+    pub fn start_selection_from_x(&mut self, x: f32, text_start_x: f32, avg_char_width: f32) {
+        if avg_char_width <= 0.0 {
+            return;
+        }
+        let relative_x = (x - text_start_x).max(0.0);
+        let char_index = (relative_x / avg_char_width).round() as usize;
+        let byte_offset = self.text.char_indices().nth(char_index).map(|(i, _)| i).unwrap_or(self.text.len());
+        let byte_offset = self.snap_to_char_boundary(byte_offset);
+        
+        self.selection = Some((byte_offset, byte_offset));
+        self.cursor = byte_offset;
+    }
+
+    /// Move the selection end (cursor) to the given X coordinate.
+    pub fn move_selection_to_x(&mut self, x: f32, text_start_x: f32, avg_char_width: f32) {
+        if let Some((anchor, _)) = self.selection {
+            if avg_char_width <= 0.0 {
+                return;
+            }
+            let relative_x = (x - text_start_x).max(0.0);
+            let char_index = (relative_x / avg_char_width).round() as usize;
+            let byte_offset = self.text.char_indices().nth(char_index).map(|(i, _)| i).unwrap_or(self.text.len());
+            let byte_offset = self.snap_to_char_boundary(byte_offset);
+            
+            self.selection = Some((anchor, byte_offset));
+            self.cursor = byte_offset;
+        }
+    }
+
     // ── Internal helpers ────────────────────────────────────────────────
 
     /// Snap a byte offset to the nearest valid char boundary (rounding down).

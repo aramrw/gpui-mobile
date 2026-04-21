@@ -122,6 +122,10 @@ uuid       = { version = "1", features = ["v5"] }
 [patch.crates-io]
 async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
 
+[patch."https://github.com/zed-industries/zed"]
+gpui_util = { path = "crates/gpui_util" }
+collections = { path = "crates/collections" }
+
 # ── profiles ─────────────────────────────────────────────────────────────────
 
 [profile.release]

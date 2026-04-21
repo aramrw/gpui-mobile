@@ -13,6 +13,10 @@
 //! ## Integration with GPUI
 //!
 //! This crate depends on the `gpui` crate from the Zed repository for all
+
+#![allow(warnings)]
+#![allow(unexpected_cfgs)]
+
 //! core types: `Platform`, `PlatformWindow`, `PlatformDisplay`, `Pixels`,
 //! `DevicePixels`, `Size`, `Point`, `Bounds`, event types, text system traits,
 //! etc.  It also depends on `gpui_wgpu` for the GPU renderer (`WgpuRenderer`)
@@ -77,6 +81,38 @@ pub mod packages;
 pub mod platform_view;
 pub mod target_platform;
 
+use gpui::SharedString;
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Global state for Monokakido-style text selection.
+#[derive(Default, Clone, Debug)]
+pub struct GlobalSelection {
+    /// The starting point of the selection (absolute coordinates).
+    pub anchor_x: f32,
+    /// The current finger position during selection (absolute coordinates).
+    pub current_x: f32,
+    /// Whether a selection is actively being made.
+    pub active: bool,
+}
+
+/// Global hover state for the zoom drop-down.
+pub struct GlobalHoverState {
+    pub text: SharedString,
+    pub context_before: SharedString,
+    pub context_after: SharedString,
+    pub range: (usize, usize),
+}
+
+impl gpui::Global for GlobalHoverState {}
+
+thread_local! {
+    pub static GLOBAL_SELECTION: RefCell<GlobalSelection> = RefCell::new(GlobalSelection::default());
+}
+
+/// Global flag to trigger re-renders when selection changes.
+pub static TEXT_INPUT_DIRTY: AtomicBool = AtomicBool::new(false);
+
 // ── System chrome (status bar / navigation bar) styling ──────────────────────
 
 /// Controls the appearance of the device status bar text and icons.
@@ -138,9 +174,6 @@ pub fn set_system_chrome(style: &SystemChromeStyle) {
 
 // ── Text input callback ──────────────────────────────────────────────────────
 
-use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, Ordering};
-
 type TextInputCallbackFn = Box<dyn FnMut(&str)>;
 
 /// Global flag indicating that text input was received and a re-render is needed.
@@ -150,7 +183,7 @@ type TextInputCallbackFn = Box<dyn FnMut(&str)>;
 /// system, nothing marks the window dirty. The platform frame callbacks check
 /// this flag and pass `force_render: true` to ensure the render cycle runs,
 /// which in turn calls `drain_pending_text()` and updates the UI.
-pub static TEXT_INPUT_DIRTY: AtomicBool = AtomicBool::new(false);
+// TEXT_INPUT_DIRTY is already defined above
 
 thread_local! {
     /// Global text input callback — set by the active text input component.

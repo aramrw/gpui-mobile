@@ -133,6 +133,7 @@ pub mod text_input;
 pub mod dialog;
 pub mod menu;
 pub mod progress_indicator;
+pub mod selectable_text;
 pub mod search_bar;
 
 // ── Containers & content ─────────────────────────────────────────────────────
@@ -141,7 +142,10 @@ pub mod hero_card;
 pub mod list_tile;
 
 pub mod bottom_sheet;
+pub mod dropdown;
+pub mod popup_modal;
 pub mod snackbar;
+pub mod zoom_header;
 
 // ── Legacy modules (deprecated — kept for backward compatibility) ─────────────
 pub mod buttons;
@@ -205,10 +209,14 @@ pub use list_tile::{
 
 pub use bottom_sheet::{bottom_sheet, sheet_item};
 pub use dialog::{BasicDialog, FullScreenDialog, SimpleDialog};
+pub use dropdown::Dropdown;
 pub use menu::{Menu, MenuAnchor};
+pub use popup_modal::{ModalPosition, PopupModal};
 pub use progress_indicator::{CircularProgressIndicator, LinearProgressIndicator};
 pub use search_bar::{SearchBar, SearchView};
+pub use selectable_text::SelectableTextView;
 pub use snackbar::snackbar;
+pub use zoom_header::ZoomHeader;
 pub use text_field::TextField;
 pub use text_input::TextInput;
 
