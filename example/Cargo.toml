@@ -20,6 +20,7 @@ gpui = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0be
 reqwest_client = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c", package = "reqwest_client" }
 reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662463bda39148ba154100dd44d3fba5873a4", package = "zed-reqwest", default-features = false, features = ["rustls-tls"] }
 log = "0.4"
+env_logger = "0.11"
 yomichan_rs = { path = "../../yomichan_rs", features = ["anki"] }
 parking_lot = { version = "0.12.4", features = ["arc_lock", "serde", "send_guard"] }
 anyhow = "1.0"

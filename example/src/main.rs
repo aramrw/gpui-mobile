@@ -38,8 +38,7 @@ fn main() {
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn main() {
-    // Allow `cargo check` / `cargo clippy` on the host (macOS / Linux) to
-    // succeed without requiring a mobile target.
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     use gpui::{App, Application};
     use gpui_mobile_example::open_main_window;
@@ -52,22 +51,4 @@ fn main() {
     Application::with_platform(current_platform).run(|cx: &mut App| {
         open_main_window(cx);
     });
-
-    // Application::with_platform(current_platform).run(|cx: &mut App| {
-    //     use gpui::{Bounds, WindowBounds, WindowOptions, prelude::*, px, size};
-    //
-    //     let bounds = Bounds::centered(None, size(px(600.0), px(600.0)), cx);
-    //     cx.open_window(
-    //         WindowOptions {
-    //             window_bounds: Some(WindowBounds::Windowed(bounds)),
-    //             ..Default::default()
-    //         },
-    //         |_window, cx| cx.new(|_cx| {
-    //             //
-    //         }),
-    //     )
-    //     .unwrap();
-    //
-    //     cx.activate(true);
-    // });
 }
