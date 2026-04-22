@@ -1,13 +1,13 @@
+use super::Router;
+use crate::GlobalYomichan;
 use gpui::{
-    AsyncApp, Context, Entity, IntoElement, ParentElement, Styled,
-    div, rgb, InteractiveElement, StatefulInteractiveElement, AppContext,
+    div, rgb, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement,
+    ParentElement, StatefulInteractiveElement, Styled,
 };
 use gpui_mobile::components::material::MaterialTheme;
 use gpui_mobile::packages::file_selector::{open_file, OpenFileOptions, TypeGroup};
-use crate::GlobalYomichan;
-use super::Router;
-use yomichan_rs::settings::core::DictionaryOptions;
 use std::path::PathBuf;
+use yomichan_rs::settings::core::DictionaryOptions;
 
 pub struct DictionariesState {}
 
@@ -16,11 +16,7 @@ impl DictionariesState {
         Self {}
     }
 
-    pub fn toggle_dictionary_enabled(
-        dict_name: String,
-        new_state: bool,
-        cx: &mut Context<Router>,
-    ) {
+    pub fn toggle_dictionary_enabled(dict_name: String, new_state: bool, cx: &mut Context<Router>) {
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         // Update in memory
         {
@@ -43,8 +39,9 @@ impl DictionariesState {
             async move {
                 let _ = global_yomichan.read().update_options();
             }
-        }).detach();
-        
+        })
+        .detach();
+
         cx.notify();
     }
 
@@ -72,7 +69,10 @@ impl DictionariesState {
         cx.notify();
     }
 
-    pub fn import_dictionary(dictionaries_state: &Entity<DictionariesState>, cx: &mut Context<Router>) {
+    pub fn import_dictionary(
+        dictionaries_state: &Entity<DictionariesState>,
+        cx: &mut Context<Router>,
+    ) {
         let options = OpenFileOptions {
             accept_type_groups: vec![TypeGroup {
                 label: "Yomichan Dictionary".into(),
@@ -84,7 +84,7 @@ impl DictionariesState {
 
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         let dictionaries_state = dictionaries_state.clone();
-        
+
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             let global_yomichan = global_yomichan.clone();
@@ -94,32 +94,41 @@ impl DictionariesState {
                         let path = PathBuf::from(file.path);
                         // import_dictionaries takes a slice of paths.
                         // We run it on the background executor to avoid freezing the UI.
-                        log::info!("Starting dictionary import for: {:?}", path);
-                        
+                        log::info!("[import]: {:?}", path);
+
                         let weak_state = dictionaries_state.downgrade();
                         cx.spawn(move |cx: &mut AsyncApp| {
                             let mut cx = cx.clone();
                             let global_yomichan = global_yomichan.clone();
                             async move {
-                                let result = cx.background_executor().spawn({
-                                    let global_yomichan = global_yomichan.clone();
-                                    async move {
-                                        global_yomichan.read().import_dictionaries(&[path])
-                                    }
-                                }).await;
+                                let result = cx
+                                    .background_executor()
+                                    .spawn({
+                                        let global_yomichan = global_yomichan.clone();
+                                        async move {
+                                            global_yomichan.read().import_dictionaries(&[path])
+                                        }
+                                    })
+                                    .await;
 
                                 match result {
                                     Ok(_) => {
-                                        log::info!("Dictionary import completed successfully");
+                                        log::info!("import completed!");
                                         let _ = global_yomichan.read().update_options();
-                                        weak_state.update(&mut cx, |_, cx: &mut Context<'_, DictionariesState>| {
-                                            cx.notify();
-                                        }).ok();
-                                    },
-                                    Err(e) => log::error!("Dictionary import failed: {}", e),
+                                        weak_state
+                                            .update(
+                                                &mut cx,
+                                                |_, cx: &mut Context<'_, DictionariesState>| {
+                                                    cx.notify();
+                                                },
+                                            )
+                                            .ok();
+                                    }
+                                    Err(e) => log::error!("import failed:\n  {}", e),
                                 }
                             }
-                        }).detach();
+                        })
+                        .detach();
                     }
                     Err(e) => {
                         log::error!("File picker error: {}", e);
@@ -127,20 +136,28 @@ impl DictionariesState {
                     _ => {}
                 }
             }
-        }).detach();
+        })
+        .detach();
     }
 }
 
-pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
+pub fn render(
+    state: &Entity<DictionariesState>,
+    router: &Router,
+    cx: &mut Context<Router>,
+) -> impl IntoElement {
     let theme = MaterialTheme::from_appearance(router.dark_mode);
-    
+
     let global_yomichan = cx.global::<GlobalYomichan>().clone();
     let (dictionaries, current_lang) = {
         let ycd = global_yomichan.read();
         let options_ptr = ycd.options();
         let profile_ptr = options_ptr.read().get_current_profile().unwrap().clone();
         let profile = profile_ptr.read();
-        (profile.options().dictionaries.clone(), profile.options().general().language.clone())
+        (
+            profile.options().dictionaries.clone(),
+            profile.options().general().language.clone(),
+        )
     };
 
     let state = state.clone();
@@ -165,7 +182,7 @@ pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Conte
                         .text_2xl()
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(rgb(theme.on_surface))
-                        .child("Dictionaries")
+                        .child("Dictionaries"),
                 )
                 .child(
                     div()
@@ -174,11 +191,14 @@ pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Conte
                         .bg(rgb(theme.primary))
                         .text_color(rgb(theme.on_primary))
                         .rounded_xl()
-                        .child("Import ZIP")
-                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
-                            DictionariesState::import_dictionary(&state, cx);
-                        }))
-                )
+                        .child("Import")
+                        .on_mouse_down(
+                            gpui::MouseButton::Left,
+                            cx.listener(move |_, _, _, cx| {
+                                DictionariesState::import_dictionary(&state, cx);
+                            }),
+                        ),
+                ),
         )
         // ── Language Section ─────────────────────────────────────────────
         .child(
@@ -186,7 +206,12 @@ pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Conte
                 .flex()
                 .flex_col()
                 .gap_2()
-                .child(div().text_sm().text_color(rgb(theme.on_surface_variant)).child("LANGUAGE"))
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(theme.on_surface_variant))
+                        .child("LANGUAGE"),
+                )
                 .child(
                     div()
                         .flex()
@@ -194,8 +219,8 @@ pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Conte
                         .gap_2()
                         .child(lang_chip("Japanese", "ja", &current_lang, theme, cx))
                         .child(lang_chip("English", "en", &current_lang, theme, cx))
-                        .child(lang_chip("Spanish", "es", &current_lang, theme, cx))
-                )
+                        .child(lang_chip("Spanish", "es", &current_lang, theme, cx)),
+                ),
         )
         // ── Dictionaries List ───────────────────────────────────────────
         .child(
@@ -203,33 +228,58 @@ pub fn render(state: &Entity<DictionariesState>, router: &Router, cx: &mut Conte
                 .flex()
                 .flex_col()
                 .gap_2()
-                .children(dictionaries.into_iter().map(|(_, opt): (String, DictionaryOptions)| {
-                    render_dictionary_card(opt, theme, cx)
-                }))
+                .children(
+                    dictionaries
+                        .into_iter()
+                        .map(|(_, opt): (String, DictionaryOptions)| {
+                            render_dictionary_card(opt, theme, cx)
+                        }),
+                ),
         )
 }
 
-fn lang_chip(label: &str, iso: &str, current: &str, theme: MaterialTheme, cx: &mut Context<Router>) -> impl IntoElement {
+fn lang_chip(
+    label: &str,
+    iso: &str,
+    current: &str,
+    theme: MaterialTheme,
+    cx: &mut Context<Router>,
+) -> impl IntoElement {
     let active = current == iso;
     let iso = iso.to_string();
     div()
         .px_3()
         .py_1()
         .rounded_xl()
-        .bg(rgb(if active { theme.primary_container } else { theme.surface_container_high }))
-        .text_color(rgb(if active { theme.on_primary_container } else { theme.on_surface }))
+        .bg(rgb(if active {
+            theme.primary_container
+        } else {
+            theme.surface_container_high
+        }))
+        .text_color(rgb(if active {
+            theme.on_primary_container
+        } else {
+            theme.on_surface
+        }))
         .text_sm()
         .child(label.to_string())
-        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
-            DictionariesState::set_language(iso.clone(), cx);
-        }))
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(move |_, _, _, cx| {
+                DictionariesState::set_language(iso.clone(), cx);
+            }),
+        )
 }
 
-fn render_dictionary_card(opt: DictionaryOptions, theme: MaterialTheme, cx: &mut Context<Router>) -> impl IntoElement {
+fn render_dictionary_card(
+    opt: DictionaryOptions,
+    theme: MaterialTheme,
+    cx: &mut Context<Router>,
+) -> impl IntoElement {
     let name = opt.name.clone();
     let name_clone = name.clone();
     let enabled = opt.enabled;
-    
+
     div()
         .flex()
         .flex_col()
@@ -242,7 +292,7 @@ fn render_dictionary_card(opt: DictionaryOptions, theme: MaterialTheme, cx: &mut
                 .text_lg()
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(rgb(theme.on_surface))
-                .child(name.clone())
+                .child(name.clone()),
         )
         .child(
             div()
@@ -254,13 +304,28 @@ fn render_dictionary_card(opt: DictionaryOptions, theme: MaterialTheme, cx: &mut
                         .px_2()
                         .py_0p5()
                         .rounded_xl()
-                        .bg(rgb(if enabled { theme.primary } else { theme.on_surface_variant }))
-                        .text_xs()
-                        .text_color(rgb(if enabled { theme.on_primary } else { theme.on_surface }))
-                        .child(if enabled { "ON" } else { "OFF" })
-                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
-                            DictionariesState::toggle_dictionary_enabled(name.clone(), !enabled, cx);
+                        .bg(rgb(if enabled {
+                            theme.primary
+                        } else {
+                            theme.on_surface_variant
                         }))
+                        .text_xs()
+                        .text_color(rgb(if enabled {
+                            theme.on_primary
+                        } else {
+                            theme.on_surface
+                        }))
+                        .child(if enabled { "ON" } else { "OFF" })
+                        .on_mouse_down(
+                            gpui::MouseButton::Left,
+                            cx.listener(move |_, _, _, cx| {
+                                DictionariesState::toggle_dictionary_enabled(
+                                    name.clone(),
+                                    !enabled,
+                                    cx,
+                                );
+                            }),
+                        ),
                 )
                 .child(
                     div()
@@ -271,9 +336,12 @@ fn render_dictionary_card(opt: DictionaryOptions, theme: MaterialTheme, cx: &mut
                         .text_xs()
                         .text_color(rgb(theme.on_error_container))
                         .child("REMOVE")
-                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
-                            DictionariesState::remove_dictionary(name_clone.clone(), cx);
-                        }))
-                )
+                        .on_mouse_down(
+                            gpui::MouseButton::Left,
+                            cx.listener(move |_, _, _, cx| {
+                                DictionariesState::remove_dictionary(name_clone.clone(), cx);
+                            }),
+                        ),
+                ),
         )
 }
