@@ -314,13 +314,13 @@ impl Router {
     pub fn navigate_to(&mut self, screen: Screen) {
         if self.current_screen != screen {
             // Dismiss webview when leaving the browser screen
-            if self.current_screen == Screen::WebViewBrowser {
-                webview_browser::dismiss_webview();
-            }
-            // Dismiss video surface when leaving video player
-            if self.current_screen == Screen::VideoPlayer {
-                video_player::dismiss();
-            }
+            // if self.current_screen == Screen::WebViewBrowser {
+            //     webview_browser::dismiss_webview();
+            // }
+            // // Dismiss video surface when leaving video player
+            // if self.current_screen == Screen::VideoPlayer {
+            //     video_player::dismiss();
+            // }
             // Pause audio when leaving audio player
             if self.current_screen == Screen::AudioPlayer {
                 audio_player::dismiss();
@@ -354,13 +354,13 @@ impl Router {
     pub fn go_back(&mut self) -> bool {
         if let Some(prev) = self.history.pop() {
             // Dismiss webview when leaving browser
-            if self.current_screen == Screen::WebViewBrowser {
-                webview_browser::dismiss_webview();
-            }
-            // Dismiss video surface when leaving video player
-            if self.current_screen == Screen::VideoPlayer {
-                video_player::dismiss();
-            }
+            // if self.current_screen == Screen::WebViewBrowser {
+            //     webview_browser::dismiss_webview();
+            // }
+            // // Dismiss video surface when leaving video player
+            // if self.current_screen == Screen::VideoPlayer {
+            //     video_player::dismiss();
+            // }
             // Pause audio when leaving audio player
             if self.current_screen == Screen::AudioPlayer {
                 audio_player::dismiss();
@@ -525,23 +525,26 @@ impl Router {
             Screen::Dictionaries => self.render_dictionaries_screen(cx).into_any_element(),
             Screen::Settings => self.render_settings_screen(cx).into_any_element(),
             Screen::About => self.render_about_screen(cx).into_any_element(),
-            Screen::Home => self.render_home_screen(cx).into_any_element(),
-            Screen::Counter => self.render_counter_screen(cx).into_any_element(),
-            Screen::AppleGlass => self.render_apple_glass_screen(cx).into_any_element(),
-            Screen::Material => self.render_material_screen(cx).into_any_element(),
-            Screen::Form => self.render_form_screen(cx).into_any_element(),
-            Screen::PackagesDemo => self.render_packages_demo_screen(cx).into_any_element(),
-            Screen::WebViewBrowser => self.render_webview_browser_screen(cx).into_any_element(),
-            Screen::Swiper => self.render_swiper_screen(cx).into_any_element(),
-            Screen::Feed => self.render_feed_screen(cx).into_any_element(),
-            Screen::Chat => self.render_chat_screen(cx).into_any_element(),
-            Screen::AudioPlayer => self.render_audio_player_screen(cx).into_any_element(),
-            Screen::VideoPlayer => {
-                // Video player has its own layout with fixed video area + scrollable controls.
-                // Rendered directly in render_current_screen to bypass the scroll wrapper.
-                return self.render_video_player_screen(window, cx).into_any_element();
-            }
-            Screen::Animations | Screen::Shaders => unreachable!(),
+            _ => panic!("match self.current_screen doesn't have this one")
+
+            // save these
+            // Screen::Home => self.render_home_screen(cx).into_any_element(),
+            // Screen::Counter => self.render_counter_screen(cx).into_any_element(),
+            // Screen::AppleGlass => self.render_apple_glass_screen(cx).into_any_element(),
+            // Screen::Material => self.render_material_screen(cx).into_any_element(),
+            // Screen::Form => self.render_form_screen(cx).into_any_element(),
+            // Screen::PackagesDemo => self.render_packages_demo_screen(cx).into_any_element(),
+            // Screen::WebViewBrowser => self.render_webview_browser_screen(cx).into_any_element(),
+            // Screen::Swiper => self.render_swiper_screen(cx).into_any_element(),
+            // Screen::Feed => self.render_feed_screen(cx).into_any_element(),
+            // Screen::Chat => self.render_chat_screen(cx).into_any_element(),
+            // Screen::AudioPlayer => self.render_audio_player_screen(cx).into_any_element(),
+            // Screen::VideoPlayer => {
+            //     // Video player has its own layout with fixed video area + scrollable controls.
+            //     // Rendered directly in render_current_screen to bypass the scroll wrapper.
+            //     return self.render_video_player_screen(window, cx).into_any_element();
+            // }
+            // Screen::Animations | Screen::Shaders => unreachable!(),
         };
 
         div()
@@ -631,58 +634,34 @@ impl Router {
         settings::render(&self.settings_state, cx.entity().clone(), self, cx)
     }
 
-    fn render_home_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        home::render(self, cx)
-    }
-
-    fn render_counter_screen(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        counter::render(self, cx)
-    }
-
     fn render_about_screen(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         about::render(self)
     }
 
-    fn render_apple_glass_screen(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        components::render_apple_glass(self)
-    }
+    // fn render_home_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    //     home::render(self, cx)
+    // }
 
-    fn render_material_screen(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        components::render_material(self)
-    }
+    // fn render_counter_screen(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+    //     counter::render(self, cx)
+    // }
 
-    fn render_form_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        form::render(self, cx)
-    }
-
-    fn render_packages_demo_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        packages_demo::render(self, cx)
-    }
-
-    fn render_webview_browser_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        webview_browser::render(self, cx)
-    }
-
-    fn render_swiper_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        swiper::render(self, cx)
-    }
-
-    fn render_feed_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        feed::render(self, cx)
-    }
-
-    fn render_chat_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        chat::render(self, cx)
-    }
-
-    fn render_audio_player_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        audio_player::render(self, cx)
-    }
-
-    fn render_video_player_screen(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        video_player::render(self, window, cx)
-    }
-
+    // fn render_apple_glass_screen(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+    //     components::render_apple_glass(self)
+    // }
+    //
+    // fn render_webview_browser_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    //     webview_browser::render(self, cx)
+    // }
+    //
+    // fn render_audio_player_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    //     audio_player::render(self, cx)
+    // }
+    //
+    // fn render_video_player_screen(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    //     video_player::render(self, window, cx)
+    // }
+   
     // ── Demo screen content (rendered below the TopAppBar) ────────────────────
 
     /// Render the Animations content area with touch handlers.
