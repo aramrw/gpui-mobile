@@ -9,7 +9,7 @@ use gpui_mobile::{set_text_input_callback, show_keyboard};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
-use yomichan_rs::TermSearchResultsSegment;
+use yomichan_rs::{SearchResult, TermSearchResultsSegment};
 
 use super::Router;
 use crate::GlobalYomichan;
@@ -19,7 +19,7 @@ pub static CLEANUP_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[[:pun
 pub struct SearchState {
     pub query: TextField,
     pub focused: bool,
-    pub search_results: Option<Vec<TermSearchResultsSegment>>,
+    pub search_results: Option<SearchResult>,
     pub search_task: Option<Task<()>>,
     pub selected_term_index: Option<usize>,
     pub view_cache: HashMap<String, Entity<SelectableTextView>>,
@@ -71,7 +71,7 @@ impl SearchState {
                         .await;
 
                     let _ = this_handle.update(&mut cx, |this, cx| {
-                        this.search_results = results;
+                        this.search_results = results.ok();
                         this.view_cache.clear();
                         if this.selected_term_index.is_none() && this.search_results.is_some() {
                             this.selected_term_index = Some(0);
@@ -119,7 +119,7 @@ pub fn render(
         String,
         usize,
         bool,
-        Option<Vec<TermSearchResultsSegment>>,
+        Option<SearchResult>,
         Option<usize>,
         bool,
     ) = {
@@ -280,22 +280,18 @@ pub fn render(
                     }),
                 )
                 .child(if let Some(results) = results {
-                    if results.is_empty() {
-                        div().px_4().child("No results found.")
-                    } else if let Some(selected_index) = selected_index {
-                        if let Some(segment) = results.get(selected_index) {
+                    if let Some(selected_index) = selected_index {
+                        if let Some(segment) = results.segments.get(selected_index) {
                             let search_state = search_state.clone();
                             let mut dictionary_entries = Vec::new();
-                            if let Some(r) = &segment.results {
-                                for (entry_idx, entry) in r.dictionary_entries.iter().enumerate() {
-                                    dictionary_entries.push(render_dictionary_entry(
-                                        entry,
-                                        entry_idx,
-                                        theme,
-                                        &search_state,
-                                        cx,
-                                    ));
-                                }
+                            for (entry_idx, entry) in segment.entries.iter().enumerate() {
+                                dictionary_entries.push(render_dictionary_entry(
+                                    entry,
+                                    entry_idx,
+                                    theme,
+                                    &search_state,
+                                    cx,
+                                ));
                             }
                             div()
                                 .flex()
@@ -310,7 +306,7 @@ pub fn render(
                         div().px_4().child("Select a word above")
                     }
                 } else {
-                    div()
+                    div().px_4().child("No results found.")
                 }),
         )
 }
@@ -348,7 +344,7 @@ fn render_segment_selector(
             .gap_2()
             .px_2()
             .py_2()
-            .children(results.into_iter().enumerate().filter_map(|(i, segment)| {
+            .children(results.segments.into_iter().enumerate().filter_map(|(i, segment)| {
                 if segment.text.trim().is_empty() {
                     return None;
                 }
