@@ -1,5 +1,5 @@
 use gpui::{
-    div, px, rgb, App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement,
+    div, px, rgb, App, AppContext, AsyncApp, Context, Div, Entity, InteractiveElement, IntoElement,
     MouseDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Task,
     WeakEntity,
 };
@@ -334,57 +334,77 @@ fn render_segment_selector(
         let state = search_state.read(cx);
         (state.search_results.clone(), state.selected_term_index)
     };
-    let search_state_handle = search_state.clone();
-
-    if let Some(results) = results {
-        div()
+    match results {
+        Some(results) => div()
             .flex()
             .flex_row()
             .flex_wrap()
             .gap_2()
             .px_2()
             .py_2()
-            .children(results.segments.into_iter().enumerate().filter_map(|(i, segment)| {
-                if segment.text.trim().is_empty() {
-                    return None;
-                }
-                let is_selected = Some(i) == selected_index;
-                let search_state_handle = search_state_handle.clone();
-                let text = segment.text.clone();
+            .children(
+                results
+                    .segments
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, segment)| {
+                        if segment.text.trim().is_empty() {
+                            return None;
+                        }
 
-                Some(
-                    div()
-                        .px_2()
-                        .py_0p5()
-                        .rounded_xl()
-                        .bg(rgb(if is_selected {
-                            theme.primary_container
-                        } else {
-                            theme.surface_container_high
-                        }))
-                        .text_color(rgb(if is_selected {
-                            theme.on_primary_container
-                        } else {
-                            theme.on_surface
-                        }))
-                        .text_xl()
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .child(text)
-                        .on_mouse_down(
-                            gpui::MouseButton::Left,
-                            cx.listener(move |_, _, _, cx| {
-                                let _ = search_state_handle.update(cx, |state, cx| {
-                                    state.selected_term_index = Some(i);
-                                    state.view_cache.clear();
-                                    cx.notify();
-                                });
-                            }),
-                        ),
-                )
-            }))
-    } else {
-        div()
+                        let is_selected = Some(i) == selected_index;
+                        let search_state_handle = search_state.clone();
+                        let text = segment.text;
+
+                        Some(render_segment(
+                            i,
+                            text.clone(),
+                            is_selected,
+                            theme,
+                            search_state.clone(),
+                            cx,
+                        ))
+                    }),
+            ),
+        None => div(),
     }
+}
+
+fn render_segment(
+    index: usize,
+    text: String,
+    is_selected: bool,
+    theme: MaterialTheme,
+    search_state: Entity<SearchState>,
+    cx: &mut Context<Router>,
+) -> Div {
+    div()
+        .px_2()
+        .py_0p5()
+        .rounded_xl()
+        .bg(rgb(if is_selected {
+            theme.primary_container
+        } else {
+            theme.surface_container_high
+        }))
+        .text_color(rgb(if is_selected {
+            theme.on_primary_container
+        } else {
+            theme.on_surface
+        }))
+        .text_xl()
+        .font_weight(gpui::FontWeight::BOLD)
+        .child(text)
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(move |_, _, _, cx| {
+                let _ = search_state.update(cx, |state, cx| {
+                    state.selected_term_index = Some(index);
+                    state.view_cache.clear();
+                    cx.notify();
+                });
+            }),
+        )
 }
 
 fn render_dictionary_entry(
