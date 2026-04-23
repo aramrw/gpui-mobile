@@ -2,7 +2,7 @@
 
 #[cfg(target_os = "android")]
 mod android;
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 mod ios;
 
 /// Cross-platform key-value persistent storage.
@@ -10,11 +10,11 @@ mod ios;
 /// On iOS this wraps `NSUserDefaults.standardUserDefaults`.
 /// On Android this wraps `PreferenceManager.getDefaultSharedPreferences()`.
 pub struct SharedPreferences {
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
     inner: ios::IosSharedPreferences,
     #[cfg(target_os = "android")]
     inner: android::AndroidSharedPreferences,
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     #[allow(dead_code)]
     inner: (),
 }
@@ -22,7 +22,7 @@ pub struct SharedPreferences {
 impl SharedPreferences {
     /// Get the default shared preferences instance.
     pub fn instance() -> Self {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             Self {
                 inner: ios::IosSharedPreferences::new(),
@@ -34,14 +34,14 @@ impl SharedPreferences {
                 inner: android::AndroidSharedPreferences::new(),
             }
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             Self { inner: () }
         }
     }
 
     pub fn get_string(&self, key: &str) -> Option<String> {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             self.inner.get_string(key)
         }
@@ -49,7 +49,7 @@ impl SharedPreferences {
         {
             self.inner.get_string(key)
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             let _ = key;
             None
@@ -57,7 +57,7 @@ impl SharedPreferences {
     }
 
     pub fn set_string(&self, key: &str, value: &str) -> Result<(), String> {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             self.inner.set_string(key, value)
         }
@@ -65,7 +65,7 @@ impl SharedPreferences {
         {
             self.inner.set_string(key, value)
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             let _ = (key, value);
             Err("Not supported".into())
@@ -73,7 +73,7 @@ impl SharedPreferences {
     }
 
     pub fn get_int(&self, key: &str) -> Option<i64> {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             self.inner.get_int(key)
         }
@@ -81,7 +81,7 @@ impl SharedPreferences {
         {
             self.inner.get_int(key)
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             let _ = key;
             None
@@ -89,7 +89,7 @@ impl SharedPreferences {
     }
 
     pub fn set_int(&self, key: &str, value: i64) -> Result<(), String> {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             self.inner.set_int(key, value)
         }
@@ -97,7 +97,7 @@ impl SharedPreferences {
         {
             self.inner.set_int(key, value)
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             let _ = (key, value);
             Err("Not supported".into())
@@ -105,7 +105,7 @@ impl SharedPreferences {
     }
 
     pub fn get_bool(&self, key: &str) -> Option<bool> {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             self.inner.get_bool(key)
         }
@@ -113,7 +113,7 @@ impl SharedPreferences {
         {
             self.inner.get_bool(key)
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             let _ = key;
             None
@@ -121,7 +121,7 @@ impl SharedPreferences {
     }
 
     pub fn set_bool(&self, key: &str, value: bool) -> Result<(), String> {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             self.inner.set_bool(key, value)
         }
@@ -129,7 +129,7 @@ impl SharedPreferences {
         {
             self.inner.set_bool(key, value)
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             let _ = (key, value);
             Err("Not supported".into())
@@ -137,7 +137,7 @@ impl SharedPreferences {
     }
 
     pub fn remove(&self, key: &str) -> Result<(), String> {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             self.inner.remove(key)
         }
@@ -145,7 +145,7 @@ impl SharedPreferences {
         {
             self.inner.remove(key)
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             let _ = key;
             Err("Not supported".into())
@@ -153,7 +153,7 @@ impl SharedPreferences {
     }
 
     pub fn clear(&self) -> Result<(), String> {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             self.inner.clear()
         }
@@ -161,14 +161,14 @@ impl SharedPreferences {
         {
             self.inner.clear()
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             Err("Not supported".into())
         }
     }
 
     pub fn contains_key(&self, key: &str) -> bool {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         {
             self.inner.contains_key(key)
         }
@@ -176,7 +176,7 @@ impl SharedPreferences {
         {
             self.inner.contains_key(key)
         }
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
         {
             let _ = key;
             false

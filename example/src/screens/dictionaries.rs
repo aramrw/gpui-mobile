@@ -62,9 +62,11 @@ impl DictionariesState {
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         {
             let ycd = global_yomichan.write();
+            log::info!("Setting language to {}", lang);
             let _ = ycd.set_language(&lang);
         }
         // Save after dropping the write lock
+        log::info!("Updating options");
         let _ = global_yomichan.read().update_options();
         cx.notify();
     }
