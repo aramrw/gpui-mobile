@@ -67,7 +67,7 @@ use std::{
     },
     time::Duration,
 };
-use util::ResultExt;
+use util::{ResultExt, input::dispatch_text_input};
 
 const WINDOW_STATE_IVAR: &str = "windowState";
 
@@ -1907,10 +1907,7 @@ extern "C" fn handle_key_event(this: &Object, native_event: id, key_equivalent: 
                 && !key_down_event.keystroke.modifiers.function
                 && !key_down_event.keystroke.modifiers.platform
                 && unsafe { is_ime_input_source_active() }
-                && with_input_handler(this, |_input_handler| {
-                    false
-                })
-                .unwrap_or(false);
+                && with_input_handler(this, |_input_handler| false).unwrap_or(false);
 
             if is_composing
                 || is_ime_printable_key
@@ -2251,8 +2248,9 @@ extern "C" fn window_did_change_key_status(this: &Object, selector: Sel, _: id) 
                 lock.renderer.set_presents_with_transaction(true);
                 lock.stop_display_link();
                 drop(lock);
-                
-                let text_dirty = gpui_util::input::TEXT_INPUT_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel);
+
+                let text_dirty = gpui_util::input::TEXT_INPUT_DIRTY
+                    .swap(false, std::sync::atomic::Ordering::AcqRel);
                 callback(RequestFrameOptions {
                     force_render: text_dirty,
                     ..Default::default()
@@ -2370,8 +2368,9 @@ extern "C" fn display_layer(this: &Object, _: Sel, _: id) {
         lock.renderer.set_presents_with_transaction(true);
         lock.stop_display_link();
         drop(lock);
-        
-        let text_dirty = gpui_util::input::TEXT_INPUT_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel);
+
+        let text_dirty =
+            gpui_util::input::TEXT_INPUT_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel);
         callback(RequestFrameOptions {
             force_render: text_dirty,
             ..Default::default()
@@ -2391,13 +2390,14 @@ extern "C" fn step(view: *mut c_void) {
 
     if let Some(mut callback) = lock.request_frame_callback.take() {
         drop(lock);
-        
-        let text_dirty = gpui_util::input::TEXT_INPUT_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel);
+
+        let text_dirty =
+            gpui_util::input::TEXT_INPUT_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel);
         callback(RequestFrameOptions {
             force_render: text_dirty,
             ..Default::default()
         });
-        
+
         window_state.lock().request_frame_callback = Some(callback);
     }
 }
@@ -2485,16 +2485,20 @@ extern "C" fn insert_text(this: &Object, _: Sel, text: id, replacement_range: NS
 
         let text = text.to_str();
         let replacement_range = replacement_range.to_range();
-        
+
         // Attempt mobile-compatible dispatcher
         let dispatched = gpui_util::input::dispatch_text_input(text);
-        
+
         // Always continue to forward to GPUI built-in handler
         with_input_handler(this, |input_handler| {
             input_handler.replace_text_in_range(replacement_range, text)
         });
 
-        log::info!("macOS insert_text: {}, dispatched to mobile={}", text, dispatched);
+        log::info!(
+            "macOS insert_text: {}, dispatched to mobile={}",
+            text,
+            dispatched
+        );
     }
 }
 
@@ -2556,7 +2560,29 @@ extern "C" fn attributed_substring_for_proposed_range(
 
 // We ignore which selector it asks us to do because the user may have
 // bound the shortcut to something else.
-extern "C" fn do_command_by_selector(this: &Object, _: Sel, _: Sel) {
+extern "C" fn do_command_by_selector(this: &Object, _: Sel, selector: Sel) {
+    let selector_name = selector.name();
+    // Bridge common mobile-compatible commands
+    let mobile_text = match selector_name {
+        "deleteBackward:" => Some("\x08"),
+        "moveLeft:" => Some("\x1b[D"),
+        "moveRight:" => Some("\x1b[C"),
+        "moveToBeginningOfParagraph:" | "moveToBeginningOfLine:" => Some("\x1b[H"),
+        "moveToEndOfParagraph:" | "moveToEndOfLine:" => Some("\x1b[F"),
+        _ => None,
+    };
+
+    if let Some(text) = mobile_text {
+        if dispatch_text_input(text) {
+            // If mobile dispatcher handled it, we might still want to let GPUI know,
+            // but for now we'll just log it.
+            log::info!(
+                "macOS do_command_by_selector: {} bridged to mobile",
+                selector_name
+            );
+        }
+    }
+
     let state = unsafe { get_window_state(this) };
     let mut lock = state.as_ref().lock();
     let keystroke = lock.keystroke_for_do_command.take();
