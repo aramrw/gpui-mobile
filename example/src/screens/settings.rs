@@ -126,7 +126,8 @@ pub fn render(
         .relative()
         .flex()
         .flex_col()
-        .size_full()
+        //.size_full()
+        .overflow_y_scroll()
         .child(
             div()
                 .flex()

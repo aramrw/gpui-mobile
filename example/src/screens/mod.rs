@@ -421,12 +421,6 @@ impl Render for Router {
             .size_full()
             .bg(rgb(bg_color))
             .text_color(rgb(text_color))
-            // ── Top safe-area spacer (status bar / notch) ────────────────
-            .when(safe_top > 0.0, |d| {
-                d.child(div().w_full().h(px(safe_top)).bg(rgb(top_color)))
-            })
-            // ── Top navigation bar ───────────────────────────────────────
-            .child(self.render_nav_bar(cx))
             // ── Screen content ───────────────────────────────────────────
             .child(self.render_current_screen(window, cx))
             // ── Bottom tab bar (only for tab-root screens) ───────────────
@@ -473,31 +467,6 @@ impl Router {
                 }),
             }
         }
-    }
-
-    /// Render the top navigation bar using the Material Design TopAppBar.
-    fn render_nav_bar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let can_go_back = self.can_go_back();
-        let title = self.current_screen.title();
-        let theme = MaterialTheme::from_appearance(self.dark_mode);
-
-        let mut bar = if can_go_back {
-            TopAppBar::small(title, theme)
-        } else {
-            TopAppBar::center_aligned(title, theme)
-        };
-
-        if can_go_back {
-            bar = bar.leading_icon(
-                "←",
-                cx.listener(|this, _event, _window, cx| {
-                    this.go_back();
-                    cx.notify();
-                }),
-            );
-        }
-
-        bar
     }
 
     /// Render the content area for the currently active screen.
