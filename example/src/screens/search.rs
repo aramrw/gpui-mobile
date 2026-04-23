@@ -112,6 +112,7 @@ pub fn render(
     router: &super::Router,
     cx: &mut Context<super::Router>,
 ) -> impl IntoElement {
+    super::form::drain_pending_text();
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
 

@@ -302,7 +302,12 @@ pub fn open_main_window(cx: &mut App) {
             window_bounds: None,
             ..Default::default()
         },
-        |window, cx| cx.new(|cx| Router::with_initial_screen(initial_screen, window, cx)),
+        |window, cx| {
+            #[cfg(target_os = "macos")]
+            log::info!("macOS: Input handling not yet mapped to gpui-mobile-example event loop.");
+
+            cx.new(|cx| Router::with_initial_screen(initial_screen, window, cx))
+        },
     ) {
         Ok(_handle) => {
             #[cfg(target_os = "android")]

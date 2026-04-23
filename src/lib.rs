@@ -110,9 +110,6 @@ thread_local! {
     pub static GLOBAL_SELECTION: RefCell<GlobalSelection> = RefCell::new(GlobalSelection::default());
 }
 
-/// Global flag to trigger re-renders when selection changes.
-pub static TEXT_INPUT_DIRTY: AtomicBool = AtomicBool::new(false);
-
 // ── System chrome (status bar / navigation bar) styling ──────────────────────
 
 /// Controls the appearance of the device status bar text and icons.
@@ -174,49 +171,12 @@ pub fn set_system_chrome(style: &SystemChromeStyle) {
 
 // ── Text input callback ──────────────────────────────────────────────────────
 
-type TextInputCallbackFn = Box<dyn FnMut(&str)>;
+pub use gpui_util::input::{
+    dispatch_text_input, set_text_input_callback, swap_dirty, TextInputCallbackFn,
+};
 
 /// Global flag indicating that text input was received and a re-render is needed.
-///
-/// GPUI only redraws when its invalidator is dirty. Since `dispatch_text_input`
-/// stores text in a thread-local (`PENDING_TEXT`) outside of GPUI's entity
-/// system, nothing marks the window dirty. The platform frame callbacks check
-/// this flag and pass `force_render: true` to ensure the render cycle runs,
-/// which in turn calls `drain_pending_text()` and updates the UI.
-// TEXT_INPUT_DIRTY is already defined above
-
-thread_local! {
-    /// Global text input callback — set by the active text input component.
-    /// When the software keyboard sends text, this callback is invoked.
-    static TEXT_INPUT_CALLBACK: RefCell<Option<TextInputCallbackFn>> = RefCell::new(None);
-}
-
-/// Register a callback that receives text from the software keyboard.
-///
-/// Only one callback can be active at a time. Call with `None` to clear it.
-/// This is typically called by the text input component when it gains focus.
-pub fn set_text_input_callback(callback: Option<TextInputCallbackFn>) {
-    TEXT_INPUT_CALLBACK.with(|cb| {
-        *cb.borrow_mut() = callback;
-    });
-}
-
-/// Dispatch text input to the registered callback.
-///
-/// Called internally by the platform layer when keyboard text is received.
-/// Returns true if a callback handled the text. Also sets `TEXT_INPUT_DIRTY`
-/// so the platform frame callback forces a re-render.
-pub fn dispatch_text_input(text: &str) -> bool {
-    TEXT_INPUT_CALLBACK.with(|cb| {
-        if let Some(callback) = cb.borrow_mut().as_mut() {
-            callback(text);
-            TEXT_INPUT_DIRTY.store(true, Ordering::Release);
-            true
-        } else {
-            false
-        }
-    })
-}
+pub use gpui_util::input::TEXT_INPUT_DIRTY;
 
 // ── Software keyboard control ────────────────────────────────────────────────
 
@@ -271,10 +231,6 @@ pub fn show_keyboard_with_type(keyboard_type: KeyboardType) {
     {
         android::jni::show_keyboard_android(keyboard_type);
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
-    {
-        let _ = keyboard_type;
-    }
 }
 
 /// Hide the software keyboard.
@@ -298,8 +254,6 @@ pub fn hide_keyboard() {
     {
         android::jni::hide_keyboard_android();
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
-    {}
 }
 
 // ── Keyboard height ─────────────────────────────────────────────────────────

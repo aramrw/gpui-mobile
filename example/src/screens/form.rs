@@ -100,9 +100,8 @@ thread_local! {
 /// Install the keyboard callback that pushes typed text into PENDING_TEXT.
 fn install_keyboard_callback() {
     gpui_mobile::set_text_input_callback(Some(Box::new(|text: &str| {
-        PENDING_TEXT.with(|pending| {
-            pending.borrow_mut().push(text.to_string());
-        });
+        log::info!("Keyboard callback received text: {}", text);
+        process_input_fragment(text);
     })));
     // Mark dirty so the next frame picks up the focused field change.
     gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
@@ -137,7 +136,16 @@ pub fn has_focused_field() -> bool {
 
 /// Drain pending keyboard text and apply it to the focused field.
 /// Also processes pending field-tap signals and tap-to-position.
+pub fn process_input_fragment(text: &str) {
+    PENDING_TEXT.with(|pending| {
+        pending.borrow_mut().push(text.to_string());
+    });
+    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+}
+
 pub fn drain_pending_text() {
+    log::info!("drain_pending_text: Checking for pending text...");
+    
     // Apply any pending field focus from on_tap_notify
     TAPPED_FIELD.with(|field| {
         if let Some(idx) = field.borrow_mut().take() {
@@ -214,6 +222,9 @@ pub fn drain_pending_text() {
 
     PENDING_TEXT.with(|pending| {
         let texts: Vec<String> = pending.borrow_mut().drain(..).collect();
+        if !texts.is_empty() {
+            log::info!("drain_pending_text: Found {} pending items", texts.len());
+        }
 
         FORM_STATE.with(|s| {
             let mut state = s.borrow_mut();
@@ -368,7 +379,7 @@ pub fn render(router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
                                     });
 
                                     install_keyboard_callback();
-                                    gpui_mobile::show_keyboard_with_type(KeyboardType::Default);
+                                    gpui_mobile::show_keyboard();
                                 })
                                 .on_selection_start(|event| {
                                     TAPPED_FIELD.with(|f| *f.borrow_mut() = Some(0));
@@ -410,7 +421,7 @@ pub fn render(router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
                                     });
 
                                     install_keyboard_callback();
-                                    gpui_mobile::show_keyboard_with_type(KeyboardType::EmailAddress);
+                                    gpui_mobile::show_keyboard();
                                 })
                                 .on_selection_start(|event| {
                                     TAPPED_FIELD.with(|f| *f.borrow_mut() = Some(1));
@@ -452,7 +463,7 @@ pub fn render(router: &Router, cx: &mut Context<Router>) -> impl IntoElement {
                                     });
 
                                     install_keyboard_callback();
-                                    gpui_mobile::show_keyboard_with_type(KeyboardType::Phone);
+                                    gpui_mobile::show_keyboard();
                                 })
                                 .on_selection_start(|event| {
                                     TAPPED_FIELD.with(|f| *f.borrow_mut() = Some(2));

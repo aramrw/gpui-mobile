@@ -291,3 +291,4 @@ impl<F: FnOnce()> Drop for Deferred<F> {
 pub fn defer<F: FnOnce()>(f: F) -> Deferred<F> {
     Deferred(Some(f))
 }
+pub mod input;

@@ -62,6 +62,7 @@ parking_lot  = "0.12"
 futures      = "0.3"
 raw-window-handle = "0.6"
 rfd          = "0.15"
+gpui_util    = { path = "crates/gpui_util" }
 
 # ── GPUI core crate (provides Platform trait, event types, geometry, etc.) ───
 gpui = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c", package = "gpui", default-features = false }

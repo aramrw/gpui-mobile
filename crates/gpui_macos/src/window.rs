@@ -277,6 +277,10 @@ unsafe fn build_classes() {
                 );
 
                 decl.add_method(
+                    sel!(acceptsFirstResponder),
+                    accepts_first_responder as extern "C" fn(&Object, Sel) -> BOOL,
+                );
+                decl.add_method(
                     sel!(acceptsFirstMouse:),
                     accepts_first_mouse as extern "C" fn(&Object, Sel, id) -> BOOL,
                 );
@@ -2247,7 +2251,12 @@ extern "C" fn window_did_change_key_status(this: &Object, selector: Sel, _: id) 
                 lock.renderer.set_presents_with_transaction(true);
                 lock.stop_display_link();
                 drop(lock);
-                callback(Default::default());
+                
+                let text_dirty = gpui_util::input::TEXT_INPUT_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel);
+                callback(RequestFrameOptions {
+                    force_render: text_dirty,
+                    ..Default::default()
+                });
 
                 let mut lock = window_state.lock();
                 lock.request_frame_callback = Some(callback);
@@ -2361,7 +2370,12 @@ extern "C" fn display_layer(this: &Object, _: Sel, _: id) {
         lock.renderer.set_presents_with_transaction(true);
         lock.stop_display_link();
         drop(lock);
-        callback(Default::default());
+        
+        let text_dirty = gpui_util::input::TEXT_INPUT_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel);
+        callback(RequestFrameOptions {
+            force_render: text_dirty,
+            ..Default::default()
+        });
 
         let mut lock = window_state.lock();
         lock.request_frame_callback = Some(callback);
@@ -2377,7 +2391,13 @@ extern "C" fn step(view: *mut c_void) {
 
     if let Some(mut callback) = lock.request_frame_callback.take() {
         drop(lock);
-        callback(Default::default());
+        
+        let text_dirty = gpui_util::input::TEXT_INPUT_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel);
+        callback(RequestFrameOptions {
+            force_render: text_dirty,
+            ..Default::default()
+        });
+        
         window_state.lock().request_frame_callback = Some(callback);
     }
 }
@@ -2465,9 +2485,16 @@ extern "C" fn insert_text(this: &Object, _: Sel, text: id, replacement_range: NS
 
         let text = text.to_str();
         let replacement_range = replacement_range.to_range();
+        
+        // Attempt mobile-compatible dispatcher
+        let dispatched = gpui_util::input::dispatch_text_input(text);
+        
+        // Always continue to forward to GPUI built-in handler
         with_input_handler(this, |input_handler| {
             input_handler.replace_text_in_range(replacement_range, text)
         });
+
+        log::info!("macOS insert_text: {}, dispatched to mobile={}", text, dispatched);
     }
 }
 
@@ -2558,6 +2585,10 @@ extern "C" fn view_did_change_effective_appearance(this: &Object, _: Sel) {
             state.lock().appearance_changed_callback = Some(callback);
         }
     }
+}
+
+extern "C" fn accepts_first_responder(_: &Object, _: Sel) -> BOOL {
+    YES
 }
 
 extern "C" fn accepts_first_mouse(this: &Object, _: Sel, _: id) -> BOOL {
