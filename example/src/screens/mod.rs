@@ -61,6 +61,7 @@ pub enum Screen {
     Chat,
     AudioPlayer,
     VideoPlayer,
+    Anki,
 }
 
 impl Screen {
@@ -100,6 +101,7 @@ impl Screen {
             "chat" => Some(Screen::Chat),
             "audio_player" | "audio" => Some(Screen::AudioPlayer),
             "video_player" | "video" => Some(Screen::VideoPlayer),
+            "anki" => Some(Screen::Anki),
             _ => None,
         }
     }
@@ -125,6 +127,7 @@ impl Screen {
             Screen::Chat => "Sarah Johnson",
             Screen::AudioPlayer => "Audio Player",
             Screen::VideoPlayer => "Video Player",
+            Screen::Anki => "Anki",
         }
     }
 
