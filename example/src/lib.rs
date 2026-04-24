@@ -88,6 +88,16 @@ impl std::ops::Deref for GlobalYomichan {
     }
 }
 
+#[derive(Clone)]
+pub struct GlobalPendingCards(pub Arc<parking_lot::RwLock<Vec<yomichan_rs::TermDictionaryEntry>>>);
+impl gpui::Global for GlobalPendingCards {}
+impl std::ops::Deref for GlobalPendingCards {
+    type Target = Arc<parking_lot::RwLock<Vec<yomichan_rs::TermDictionaryEntry>>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Android entry point
 // ═══════════════════════════════════════════════════════════════════════════
@@ -289,7 +299,8 @@ pub fn open_main_window(cx: &mut App) {
     }
 
     cx.set_global(GlobalYomichan(yomichan_lock));
-    log::info!("Successfully initialized GlobalYomichan");
+    cx.set_global(GlobalPendingCards(Arc::new(parking_lot::RwLock::new(Vec::new()))));
+    log::info!("Successfully initialized GlobalYomichan and GlobalPendingCards");
 
     // Check if the app was launched via a deeplink and determine the initial screen.
     let initial_screen = match gpui_mobile::packages::deeplink::get_initial_link() {
