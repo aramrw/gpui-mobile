@@ -1,10 +1,11 @@
 use gpui::{
     div, rgb, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render, Styled,
 };
-use gpui_mobile::components::material::MaterialTheme;
+use gpui::prelude::FluentBuilder;
+use gpui_mobile::components::material::{MaterialTheme, TopAppBar};
 use crate::GlobalPendingCards;
 
-use super::Router;
+use super::{Router, Screen};
 
 pub struct AnkiRouter {
     // We don't store drafts here anymore, we read from GlobalPendingCards
@@ -38,20 +39,22 @@ pub fn render(
         );
     }
 
+    let mut app_bar = TopAppBar::small("Anki Drafts", theme);
+    if router.can_go_back() {
+        app_bar = app_bar.leading_icon("⬅️", cx.listener(|router: &mut Router, _, _, cx| {
+            router.go_back();
+            cx.notify();
+        }));
+    }
+
     div()
         .id("anki-router")
         .flex()
         .flex_col()
         .size_full()
+        .child(app_bar)
         .p_4()
         .gap_4()
-        .child(
-            div()
-                .text_2xl()
-                .font_weight(gpui::FontWeight::BOLD)
-                .text_color(rgb(theme.on_surface))
-                .child("Anki Drafts"),
-        )
         .child(
             div()
                 .flex()
