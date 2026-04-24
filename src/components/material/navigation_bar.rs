@@ -161,10 +161,9 @@ impl NavigationBarBuilder {
         let mut children: Vec<AnyElement> = Vec::with_capacity(self.items.len());
 
         for (index, entry) in self.items.into_iter().enumerate() {
-            let fg = if entry.active {
-                active_color
-            } else {
-                inactive_color
+            let fg = match entry.active {
+                true => active_color,
+                false => inactive_color,
             };
 
             let el = div()
@@ -181,8 +180,8 @@ impl NavigationBarBuilder {
                         .items_center()
                         .justify_center()
                         .px_5()
-                        .py(px(4.0))
-                        .rounded(px(16.0))
+                        .py_1()
+                        .rounded_sm()
                         .when(entry.active, |d| d.bg(rgb(active_indicator)))
                         .text_xl()
                         .text_color(rgb(fg))
@@ -199,7 +198,7 @@ impl NavigationBarBuilder {
             .flex_row()
             .items_center()
             .w_full()
-            .py_3()
+            .py_1()
             .bg(rgb(surface));
 
         for child in children {

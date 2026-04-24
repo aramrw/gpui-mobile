@@ -112,7 +112,7 @@ pub fn render(
     }
 
     let mut app_bar = TopAppBar::small("Anki Drafts", theme).trailing_icon(
-        "⚙️",
+        "☰",
         cx.listener(|router: &mut Router, _, _, cx| {
             router.navigate_to(Screen::AnkiSettings);
             cx.notify();
@@ -121,7 +121,7 @@ pub fn render(
 
     if router.can_go_back() {
         app_bar = app_bar.leading_icon(
-            "⬅️",
+            "«",
             cx.listener(|router: &mut Router, _, _, cx| {
                 router.go_back();
                 cx.notify();

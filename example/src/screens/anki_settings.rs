@@ -193,6 +193,7 @@ impl AnkiSettingsState {
 
         let ycd = global_yomichan.read();
         let _ = ycd.anki().set_field_mappings(&mappings);
+        let _ = ycd.update_options();
         log::info!("Anki settings saved");
     }
 }
@@ -208,7 +209,7 @@ pub fn render(
 
     let mut app_bar = TopAppBar::small("Anki Settings", theme);
     if router.can_go_back() {
-        app_bar = app_bar.leading_icon("⬅️", cx.listener(|router: &mut Router, _, _, cx| {
+        app_bar = app_bar.leading_icon("«", cx.listener(|router: &mut Router, _, _, cx| {
             router.go_back();
             cx.notify();
         }));

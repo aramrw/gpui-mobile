@@ -567,7 +567,7 @@ impl Router {
 
         NavigationBarBuilder::new(dark)
             .item(
-                "🔍",
+                "⌕",
                 "Search",
                 current == Screen::Search,
                 cx.listener(move |this, _, _, cx| {
@@ -576,7 +576,7 @@ impl Router {
                 }),
             )
             .item(
-                "📚",
+                "⌂",
                 "Dicts",
                 current == Screen::Dictionaries,
                 cx.listener(move |this, _, _, cx| {
@@ -585,7 +585,16 @@ impl Router {
                 }),
             )
             .item(
-                "⚙️",
+                "⛩",
+                "Anki",
+                current == Screen::Anki,
+                cx.listener(move |this, _, _, cx| {
+                    this.navigate_to(Screen::Anki);
+                    cx.notify();
+                }),
+            )
+            .item(
+                "☰",
                 "Settings",
                 current == Screen::Settings,
                 cx.listener(move |this, _, _, cx| {
@@ -594,20 +603,11 @@ impl Router {
                 }),
             )
             .item(
-                "ℹ️",
+                "♥",
                 "About",
                 current == Screen::About,
                 cx.listener(move |this, _, _, cx| {
                     this.navigate_to(Screen::About);
-                    cx.notify();
-                }),
-            )
-            .item(
-                "🃏",
-                "Anki",
-                current == Screen::Anki,
-                cx.listener(move |this, _, _, cx| {
-                    this.navigate_to(Screen::Anki);
                     cx.notify();
                 }),
             )
