@@ -13,6 +13,7 @@
 //! - **Shaders** — dynamic gradients, floating orbs, and ripple effects.
 
 pub mod about;
+pub mod anki;
 pub mod audio_player;
 pub mod chat;
 pub mod components;
@@ -203,6 +204,7 @@ pub struct Router {
 
     // ── Yomichan state ───────────────────────────────────────────────────
     pub search_state: Entity<search::SearchState>,
+    pub anki_state: Entity<anki::AnkiRouter>,
     pub dictionaries_state: Entity<dictionaries::DictionariesState>,
     settings_state: Entity<settings::SettingsState>,
 
@@ -243,6 +245,7 @@ impl Router {
         }
 
         let search_state = cx.new(|cx| search::SearchState::new(window, cx));
+        let anki_state = cx.new(|_| anki::AnkiRouter::new());
         let dictionaries_state = cx.new(|cx| dictionaries::DictionariesState::new(window, cx));
         let settings_state = cx.new(|cx| settings::SettingsState::new(window, cx));
         let zoom_header = cx.new(|_cx| {
@@ -258,6 +261,7 @@ impl Router {
             history,
             safe_area,
             search_state,
+            anki_state,
             dictionaries_state,
             settings_state,
             zoom_header,
@@ -494,6 +498,7 @@ impl Router {
 
         let screen_content = match self.current_screen {
             Screen::Search => self.render_search_screen(cx).into_any_element(),
+            Screen::Anki => self.render_anki_screen(cx).into_any_element(),
             Screen::Dictionaries => self.render_dictionaries_screen(cx).into_any_element(),
             Screen::Settings => self.render_settings_screen(cx).into_any_element(),
             Screen::About => self.render_about_screen(cx).into_any_element(),
@@ -596,6 +601,10 @@ impl Router {
 
     fn render_search_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
         search::render(&self.search_state, cx.entity().clone(), self, cx)
+    }
+
+    fn render_anki_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        anki::render(&self.anki_state, self, cx)
     }
 
     fn render_dictionaries_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
