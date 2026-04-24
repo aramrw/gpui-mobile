@@ -63,10 +63,10 @@ extern crate gpui_mobile;
 pub mod demos;
 pub mod screens;
 
-#[cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))]
-use gpui::{App, AppContext};
 #[cfg(any(target_os = "ios", target_os = "android"))]
 use gpui::{prelude::*, App, WindowOptions};
+#[cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))]
+use gpui::{App, AppContext};
 
 #[cfg(target_os = "android")]
 use gpui::Application;
@@ -166,10 +166,17 @@ struct NsLogLogger;
 
 #[cfg(target_os = "ios")]
 impl log::Log for NsLogLogger {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool { true }
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
-            let msg = format!("[{}] {}: {}", record.level(), record.target(), record.args());
+            let msg = format!(
+                "[{}] {}: {}",
+                record.level(),
+                record.target(),
+                record.args()
+            );
             nslog(&msg);
         }
     }
@@ -181,7 +188,9 @@ impl log::Log for NsLogLogger {
 fn nslog(msg: &str) {
     use objc::{class, msg_send, runtime::Object, sel, sel_impl};
     unsafe {
-        extern "C" { fn NSLog(fmt: *mut Object, ...); }
+        extern "C" {
+            fn NSLog(fmt: *mut Object, ...);
+        }
         let c_msg = std::ffi::CString::new(msg).unwrap_or_default();
         let ns_msg: *mut Object = msg_send![class!(NSString), alloc];
         let ns_msg: *mut Object = msg_send![ns_msg, initWithUTF8String: c_msg.as_ptr()];
@@ -238,7 +247,7 @@ pub fn open_main_window(cx: &mut App) {
     use gpui::WindowOptions;
 
     use crate::screens::Router;
-    // don't fucking uncomment this 
+    // don't fucking uncomment this
     // log::info!("Setting up HTTP client for image loading...");
     // let client = reqwest::Client::builder()
     //     .danger_accept_invalid_certs(true)
@@ -258,10 +267,10 @@ pub fn open_main_window(cx: &mut App) {
         std::fs::create_dir_all(&data_dir).expect("could not create data dir");
     }
     log::info!("Yomichan data directory: {:?}", data_dir);
-    
+
     let yomichan_instance = Yomichan::new(data_dir).expect("Failed to initialize Yomichan");
     let yomichan_lock = Arc::new(parking_lot::RwLock::new(yomichan_instance.into()));
-    
+
     // Ensure default language is set to avoid panics
     {
         let mut ycd: parking_lot::RwLockWriteGuard<yomichan_rs::Yomichan> = yomichan_lock.write();
@@ -273,7 +282,8 @@ pub fn open_main_window(cx: &mut App) {
             prof.options().general().language.clone()
         };
         if current_lang.is_empty() {
-            ycd.set_language("ja").expect("failed to set default language");
+            ycd.set_language("ja")
+                .expect("failed to set default language");
             let _ = ycd.update_options();
         }
     }
