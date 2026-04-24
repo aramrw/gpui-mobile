@@ -9,7 +9,7 @@ use gpui_mobile::{set_text_input_callback, show_keyboard};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
-use yomichan_rs::{SearchResult, TermSearchResultsSegment};
+use yomichan_rs::{SearchResult, TermDictionaryEntry, TermSearchResultsSegment};
 
 use super::Router;
 use crate::{GlobalPendingCards, GlobalYomichan};
@@ -382,7 +382,7 @@ fn render_segment(
     div()
         .px_2()
         .py_0p5()
-        .rounded_xl()
+        .rounded_sm()
         .bg(rgb(if is_selected {
             theme.primary_container
         } else {
@@ -393,7 +393,7 @@ fn render_segment(
         } else {
             theme.on_surface
         }))
-        .text_xl()
+        .text_sm()
         .font_weight(gpui::FontWeight::BOLD)
         .child(text)
         .on_mouse_down(
@@ -404,6 +404,32 @@ fn render_segment(
                     state.view_cache.clear();
                     cx.notify();
                 });
+            }),
+        )
+}
+
+fn add_to_anki_btn(
+    entry: &TermDictionaryEntry,
+    cx: &mut Context<Router>,
+    theme: MaterialTheme,
+) -> Div {
+    let entry_clone = entry.clone();
+    let pending_cards = cx.global::<GlobalPendingCards>().clone();
+    div()
+        .h(px(35.0))
+        .px_0p5()
+        .py_0p5()
+        .rounded_sm()
+        .bg(rgb(theme.outline))
+        .text_color(rgb(theme.on_primary))
+        .child("🃏")
+        .hover(|sf| sf.opacity(0.5))
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(move |_, _, _, _| {
+                let mut cards = pending_cards.write();
+                cards.push(entry_clone.clone());
+                log::info!("Added entry to Anki drafts");
             }),
         )
 }
@@ -478,30 +504,14 @@ fn render_dictionary_entry(
         )
     });
 
-    let entry_clone = entry.clone();
-    let pending_cards = cx.global::<GlobalPendingCards>().clone();
-    let add_to_anki = div()
-        .px_2()
-        .py_1()
-        .rounded_lg()
-        .bg(rgb(theme.primary))
-        .text_color(rgb(theme.on_primary))
-        .child("Add to Anki")
-        .on_mouse_down(
-            gpui::MouseButton::Left,
-            cx.listener(move |_, _, _, _| {
-                let mut cards = pending_cards.write();
-                cards.push(entry_clone.clone());
-                log::info!("Added entry to Anki drafts");
-            }),
-        );
+    let add_to_anki_btn = add_to_anki_btn(entry, cx, theme);
 
     div()
         .flex()
         .flex_col()
         .bg(rgb(theme.surface_container_high))
         .p_4()
-        .rounded_2xl()
+        .rounded_sm()
         .gap_2()
         .child(
             div()
@@ -513,19 +523,19 @@ fn render_dictionary_entry(
                         .flex_col()
                         .child(
                             div()
-                                .text_sm()
+                                .text_lg()
                                 .text_color(rgb(theme.secondary))
                                 .child(reading_view),
                         )
                         .child(
                             div()
-                                .text_2xl()
+                                .text_3xl()
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(rgb(theme.primary))
                                 .child(term_view),
                         ),
                 )
-                .child(add_to_anki),
+                .child(add_to_anki_btn),
         )
         .children(definitions)
 }

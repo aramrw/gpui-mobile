@@ -84,7 +84,7 @@
 //             .child(div().h(px(100.0)))
 //             .child(
 //                 div()
-//                     .text_xl()
+//                     .text_sm()
 //                     .text_color(rgb(text_color))
 //                     .child("No more profiles!"),
 //             )
@@ -93,7 +93,7 @@
 //                 div()
 //                     .px_6()
 //                     .py_3()
-//                     .rounded_xl()
+//                     .rounded_sm()
 //                     .bg(rgb(BLUE))
 //                     .child(
 //                         div()
@@ -162,7 +162,7 @@
 //                     .opacity(opacity)
 //                     .child(
 //                         div()
-//                             .text_xl()
+//                             .text_sm()
 //                             .text_color(rgb(label_color))
 //                             .child(label),
 //                     ),
@@ -183,7 +183,7 @@
 //             .left(px(card_offset_x + (1.0 - base_scale) * 160.0))
 //             .w(px(320.0 * base_scale))
 //             .h(px(420.0 * base_scale))
-//             .rounded_3xl()
+//             .rounded_3sm()
 //             .overflow_hidden()
 //             .bg(rgb(profile.color))
 //             .flex()
@@ -218,7 +218,7 @@
 //                             .gap_2()
 //                             .child(
 //                                 div()
-//                                     .text_xl()
+//                                     .text_sm()
 //                                     .text_color(rgb(0xFFFFFF))
 //                                     .child(profile.name.to_string()),
 //                             )
@@ -426,7 +426,7 @@
 //         .border_color(rgb(color))
 //         .child(
 //             div()
-//                 .text_xl()
+//                 .text_sm()
 //                 .text_color(rgb(color))
 //                 .child(icon.to_string()),
 //         )

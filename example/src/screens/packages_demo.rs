@@ -1267,7 +1267,7 @@
 //     div()
 //         .flex()
 //         .flex_col()
-//         .rounded_xl()
+//         .rounded_sm()
 //         .bg(rgb(bg))
 //         .overflow_hidden()
 // }

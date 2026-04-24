@@ -34,7 +34,7 @@
 //                 .gap_1()
 //                 .child(
 //                     div()
-//                         .text_xl()
+//                         .text_sm()
 //                         .text_color(rgb(text_color))
 //                         .child(format!("Hello, {}!", &user_name)),
 //                 )
@@ -297,7 +297,7 @@
 //         .flex_row()
 //         .gap_3()
 //         .p_4()
-//         .rounded_xl()
+//         .rounded_sm()
 //         .bg(rgb(bg))
 //         .items_center()
 //         .child(div().w(px(4.0)).h_full().rounded_sm().bg(rgb(accent)))
@@ -308,7 +308,7 @@
 //                 .gap_1()
 //                 .child(
 //                     div()
-//                         .text_2xl()
+//                         .text_2sm()
 //                         .text_color(rgb(text_color))
 //                         .child(value.to_string()),
 //                 )
@@ -340,11 +340,11 @@
 //         .flex_row()
 //         .gap_3()
 //         .p_4()
-//         .rounded_xl()
+//         .rounded_sm()
 //         .bg(rgb(bg))
 //         .items_center()
 //         .child(div().w(px(4.0)).h_full().rounded_sm().bg(rgb(accent)))
-//         .child(div().text_2xl().child(icon.to_string()))
+//         .child(div().text_2sm().child(icon.to_string()))
 //         .child(
 //             div()
 //                 .flex()

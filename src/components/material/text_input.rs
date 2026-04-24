@@ -210,9 +210,9 @@ impl<V: 'static> TextInput<V> {
 
         // Input container
         let mut input_box = div()
-            .px_3()
-            .py_2()
-            .rounded_md()
+            .px_2p5()
+            .py_1p5()
+            .rounded_sm()
             .border_color(rgb(border_color))
             .bg(rgb(t.surface));
 

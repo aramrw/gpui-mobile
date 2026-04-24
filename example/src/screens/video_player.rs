@@ -238,13 +238,13 @@
 //                         .items_center()
 //                         .gap_3()
 //                         .p_3()
-//                         .rounded_xl()
+//                         .rounded_sm()
 //                         .bg(rgb(card_bg))
 //                         .border_l_4()
 //                         .border_color(rgb(accent))
 //                         .child(
 //                             div()
-//                                 .text_xl()
+//                                 .text_sm()
 //                                 .text_color(rgb(if is_current { MAUVE } else { sub_text }))
 //                                 .child("🎬"),
 //                         )
@@ -280,7 +280,7 @@
 //                 .flex_col()
 //                 .gap_3()
 //                 .p_4()
-//                 .rounded_xl()
+//                 .rounded_sm()
 //                 .bg(rgb(card_bg))
 //                 // Video title
 //                 .child(
@@ -391,7 +391,7 @@
 //                         // Previous
 //                         .child(
 //                             div()
-//                                 .text_2xl()
+//                                 .text_2sm()
 //                                 .text_color(rgb(text_color))
 //                                 .child("⏮")
 //                                 .on_mouse_down(
@@ -408,7 +408,7 @@
 //                         // Rewind 10s
 //                         .child(
 //                             div()
-//                                 .text_xl()
+//                                 .text_sm()
 //                                 .text_color(rgb(text_color))
 //                                 .child("-10s")
 //                                 .on_mouse_down(
@@ -436,7 +436,7 @@
 //                                 .justify_center()
 //                                 .child(
 //                                     div()
-//                                         .text_2xl()
+//                                         .text_2sm()
 //                                         .text_color(rgb(0xFFFFFF))
 //                                         .child(if is_playing { "⏸" } else { "▶" }),
 //                                 )
@@ -460,7 +460,7 @@
 //                         // Forward 10s
 //                         .child(
 //                             div()
-//                                 .text_xl()
+//                                 .text_sm()
 //                                 .text_color(rgb(text_color))
 //                                 .child("+10s")
 //                                 .on_mouse_down(
@@ -480,7 +480,7 @@
 //                         // Next
 //                         .child(
 //                             div()
-//                                 .text_2xl()
+//                                 .text_2sm()
 //                                 .text_color(rgb(text_color))
 //                                 .child("⏭")
 //                                 .on_mouse_down(
@@ -503,7 +503,7 @@
 //                 .flex_col()
 //                 .gap_2()
 //                 .p_4()
-//                 .rounded_xl()
+//                 .rounded_sm()
 //                 .bg(rgb(card_bg))
 //                 .child(
 //                     div()
@@ -543,7 +543,7 @@
 //                 .flex_col()
 //                 .gap_2()
 //                 .p_4()
-//                 .rounded_xl()
+//                 .rounded_sm()
 //                 .bg(rgb(card_bg))
 //                 .child(
 //                     div()
@@ -584,7 +584,7 @@
 //                 .items_center()
 //                 .justify_between()
 //                 .p_4()
-//                 .rounded_xl()
+//                 .rounded_sm()
 //                 .bg(rgb(card_bg))
 //                 .child(
 //                     div()
@@ -624,7 +624,7 @@
 //             d.child(
 //                 div()
 //                     .p_3()
-//                     .rounded_xl()
+//                     .rounded_sm()
 //                     .bg(rgb(0x3D1111))
 //                     .child(
 //                         div()

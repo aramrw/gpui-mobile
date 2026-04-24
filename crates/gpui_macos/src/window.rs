@@ -1797,7 +1797,7 @@ extern "C" fn handle_key_equivalent(this: &Object, _: Sel, native_event: id) -> 
 }
 
 extern "C" fn handle_key_down(this: &Object, _: Sel, native_event: id) {
-    log::info!("GPUIView: key down received");
+    //log::info!("GPUIView: key down received");
     handle_key_event(this, native_event, false);
 }
 

@@ -175,7 +175,7 @@
 //                     .justify_center()
 //                     .px_4()
 //                     .py_3()
-//                     .rounded_xl()
+//                     .rounded_sm()
 //                     .bg(rgb(0xFA7B17))
 //                     .child(
 //                         div()
@@ -257,7 +257,7 @@
 //         .justify_center()
 //         .px_2()
 //         .py_3()
-//         .rounded_xl()
+//         .rounded_sm()
 //         .bg(rgb(color))
 //         .child(
 //             div()

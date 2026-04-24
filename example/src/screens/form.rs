@@ -100,7 +100,7 @@ thread_local! {
 /// Install the keyboard callback that pushes typed text into PENDING_TEXT.
 fn install_keyboard_callback() {
     gpui_mobile::set_text_input_callback(Some(Box::new(|text: &str| {
-        log::info!("Keyboard callback received text: {}", text);
+        //log::info!("Keyboard callback received text: {}", text);
         process_input_fragment(text);
     })));
     // Mark dirty so the next frame picks up the focused field change.
@@ -144,7 +144,7 @@ pub fn process_input_fragment(text: &str) {
 }
 
 pub fn drain_pending_text() {
-    log::info!("drain_pending_text: Checking for pending text...");
+    //log::info!("drain_pending_text: Checking for pending text...");
     
     // Apply any pending field focus from on_tap_notify
     TAPPED_FIELD.with(|field| {

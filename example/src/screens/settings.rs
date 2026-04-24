@@ -321,7 +321,7 @@ fn render_add_profile_modal(
             div()
                 .w(px(300.0))
                 .p_6()
-                .rounded_xl()
+                .rounded_sm()
                 .bg(rgb(theme.surface_container_high))
                 .flex()
                 .flex_col()
@@ -424,7 +424,7 @@ fn settings_card(bg: u32) -> gpui::Div {
     div()
         .flex()
         .flex_col()
-        .rounded_xl()
+        .rounded_sm()
         .bg(rgb(bg))
 }
 
@@ -471,7 +471,7 @@ fn toggle_row(
             div()
                 .px_2()
                 .py_0p5()
-                .rounded_xl()
+                .rounded_sm()
                 .bg(rgb(toggle_bg))
                 .text_xs()
                 .text_color(rgb(toggle_text))

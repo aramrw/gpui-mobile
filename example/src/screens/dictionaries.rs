@@ -181,7 +181,7 @@ pub fn render(
                 .justify_between()
                 .child(
                     div()
-                        .text_2xl()
+                        .text_sm()
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(rgb(theme.on_surface))
                         .child("Dictionaries"),
@@ -192,7 +192,7 @@ pub fn render(
                         .py_2()
                         .bg(rgb(theme.primary))
                         .text_color(rgb(theme.on_primary))
-                        .rounded_xl()
+                        .rounded_sm()
                         .child("Import")
                         .on_mouse_down(
                             gpui::MouseButton::Left,
@@ -252,7 +252,7 @@ fn lang_chip(
     div()
         .px_3()
         .py_1()
-        .rounded_xl()
+        .rounded_sm()
         .bg(rgb(if active {
             theme.primary_container
         } else {
@@ -287,7 +287,7 @@ fn render_dictionary_card(
         .flex_col()
         .bg(rgb(theme.surface_container_high))
         .p_4()
-        .rounded_xl()
+        .rounded_sm()
         .gap_3()
         .child(
             div()
@@ -305,7 +305,7 @@ fn render_dictionary_card(
                     div()
                         .px_2()
                         .py_0p5()
-                        .rounded_xl()
+                        .rounded_sm()
                         .bg(rgb(if enabled {
                             theme.primary
                         } else {
@@ -333,7 +333,7 @@ fn render_dictionary_card(
                     div()
                         .px_2()
                         .py_0p5()
-                        .rounded_xl()
+                        .rounded_sm()
                         .bg(rgb(theme.error_container))
                         .text_xs()
                         .text_color(rgb(theme.on_error_container))
