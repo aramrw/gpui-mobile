@@ -158,6 +158,10 @@ unsafe fn build_classes() {
                     handle_view_event as extern "C" fn(&Object, Sel, id),
                 );
                 decl.add_method(
+                    sel!(paste:),
+                    handle_paste as extern "C" fn(&Object, Sel, id),
+                );
+                decl.add_method(
                     sel!(rightMouseUp:),
                     handle_view_event as extern "C" fn(&Object, Sel, id),
                 );
@@ -1766,10 +1770,34 @@ extern "C" fn dealloc_view(this: &Object, _: Sel) {
 }
 
 extern "C" fn handle_key_equivalent(this: &Object, _: Sel, native_event: id) -> BOOL {
+    log::info!("GPUIWindow: key equivalent received");
+    
+    // Manually check for Cmd+V to handle paste if it's not working via standard responder
+    unsafe {
+        let modifier_flags: NSEventModifierFlags = msg_send![native_event, modifierFlags];
+        let characters: id = msg_send![native_event, charactersIgnoringModifiers];
+        if !characters.is_null() {
+            let c_str = std::ffi::CStr::from_ptr(msg_send![characters, UTF8String]);
+            let ch = c_str.to_string_lossy();
+            if modifier_flags.contains(NSEventModifierFlags::NSCommandKeyMask) && ch == "v" {
+                log::info!("GPUIWindow: Cmd+V detected, manually triggering paste");
+                let pasteboard: id = msg_send![class!(NSPasteboard), generalPasteboard];
+                let string: id = msg_send![pasteboard, stringForType: cocoa::appkit::NSPasteboardTypeString];
+                if !string.is_null() {
+                    let c_str = std::ffi::CStr::from_ptr(msg_send![string, UTF8String]);
+                    let text = c_str.to_string_lossy().to_string();
+                    gpui_util::input::dispatch_text_input(&text);
+                    return YES;
+                }
+            }
+        }
+    }
+    
     handle_key_event(this, native_event, true)
 }
 
 extern "C" fn handle_key_down(this: &Object, _: Sel, native_event: id) {
+    log::info!("GPUIView: key down received");
     handle_key_event(this, native_event, false);
 }
 
@@ -2560,27 +2588,51 @@ extern "C" fn attributed_substring_for_proposed_range(
 
 // We ignore which selector it asks us to do because the user may have
 // bound the shortcut to something else.
+extern "C" fn handle_paste(this: &Object, _: Sel, _sender: id) {
+    let selector = sel!(paste:);
+    do_command_by_selector(this, sel!(doCommandBySelector:), selector);
+}
+
 extern "C" fn do_command_by_selector(this: &Object, _: Sel, selector: Sel) {
     let selector_name = selector.name();
+    log::info!("macOS do_command_by_selector: selector received: {}", selector_name);
     // Bridge common mobile-compatible commands
     let mobile_text = match selector_name {
-        "deleteBackward:" => Some("\x08"),
-        "moveLeft:" => Some("\x1b[D"),
-        "moveRight:" => Some("\x1b[C"),
-        "moveToBeginningOfParagraph:" | "moveToBeginningOfLine:" => Some("\x1b[H"),
-        "moveToEndOfParagraph:" | "moveToEndOfLine:" => Some("\x1b[F"),
+        "deleteBackward:" => Some("\x08".to_string()),
+        "paste:" => {
+            log::info!("macOS do_command_by_selector: paste: selector received");
+            let pasteboard: id = unsafe { msg_send![class!(NSPasteboard), generalPasteboard] };
+            log::info!("macOS do_command_by_selector: paste: pasteboard retrieved: {:?}", pasteboard);
+            let string: id = unsafe { msg_send![pasteboard, stringForType: cocoa::appkit::NSPasteboardTypeString] };
+            log::info!("macOS do_command_by_selector: paste: string pointer: {:?}", string);
+            
+            if !string.is_null() {
+                let c_str = unsafe { std::ffi::CStr::from_ptr(msg_send![string, UTF8String]) };
+                let text = c_str.to_string_lossy();
+                log::info!("macOS do_command_by_selector: paste: found text: {}", text);
+                Some(text.to_string())
+            } else {
+                log::info!("macOS do_command_by_selector: paste: no string found on pasteboard");
+                None
+            }
+        }
+        "moveLeft:" => Some("\x1b[D".to_string()),
+        "moveRight:" => Some("\x1b[C".to_string()),
+        "moveToBeginningOfParagraph:" | "moveToBeginningOfLine:" => Some("\x1b[H".to_string()),
+        "moveToEndOfParagraph:" | "moveToEndOfLine:" => Some("\x1b[F".to_string()),
         _ => None,
     };
 
     if let Some(text) = mobile_text {
-        if dispatch_text_input(text) {
-            // If mobile dispatcher handled it, we might still want to let GPUI know,
-            // but for now we'll just log it.
-            log::info!(
-                "macOS do_command_by_selector: {} bridged to mobile",
-                selector_name
-            );
-        }
+        log::info!("macOS do_command_by_selector: paste: found text, bridging to input handler");
+        // Dispatch to mobile-compatible dispatcher
+        let dispatched = dispatch_text_input(&text);
+        log::info!("macOS do_command_by_selector: paste: dispatch_text_input returned {}", dispatched);
+
+        // Always continue to forward to GPUI built-in handler to ensure the input field state is updated
+        with_input_handler(this, |input_handler| {
+            input_handler.replace_text_in_range(None, &text)
+        });
     }
 
     let state = unsafe { get_window_state(this) };

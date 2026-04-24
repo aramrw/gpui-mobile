@@ -1,1 +1,1 @@
-cd example && cargo r --package gpui-mobile-example
+cd example && RUSTFLAGS="-Awarnings" cargo r --package gpui-mobile-example

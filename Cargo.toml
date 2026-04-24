@@ -39,7 +39,7 @@ notifications = []
 location = []
 audio = []
 video_player = []
-clipboard = []
+clipboard = ["dep:arboard"]
 local_auth = []
 in_app_review = []
 contacts = []
@@ -62,6 +62,7 @@ parking_lot  = "0.12"
 futures      = "0.3"
 raw-window-handle = "0.6"
 rfd          = "0.15"
+arboard      = { version = "3.4", optional = true }
 gpui_util    = { path = "crates/gpui_util" }
 
 # ── GPUI core crate (provides Platform trait, event types, geometry, etc.) ───

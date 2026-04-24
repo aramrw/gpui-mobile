@@ -1312,6 +1312,24 @@ extern "C" fn open_urls(this: &mut Object, _: Sel, _: id, urls: id) {
 }
 
 extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
+    let selector_name = unsafe { 
+        let sel: Sel = msg_send![item, action];
+        sel.name().to_string()
+    };
+    log::info!("handle_menu_item: selector: {}", selector_name);
+    if selector_name == "paste:" {
+        log::info!("handle_menu_item: caught paste selector, triggering paste logic");
+        let pasteboard: id = unsafe { msg_send![class!(NSPasteboard), generalPasteboard] };
+        let string: id = unsafe { msg_send![pasteboard, stringForType: cocoa::appkit::NSPasteboardTypeString] };
+        if !string.is_null() {
+            let c_str = unsafe { std::ffi::CStr::from_ptr(msg_send![string, UTF8String]) };
+            let text = c_str.to_string_lossy().to_string();
+            log::info!("handle_menu_item: paste: found text: {}", text);
+            gpui_util::input::dispatch_text_input(&text);
+        }
+        return;
+    }
+
     unsafe {
         let platform = get_mac_platform(this);
         let mut lock = platform.0.lock();

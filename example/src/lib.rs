@@ -238,15 +238,16 @@ pub fn open_main_window(cx: &mut App) {
     use gpui::WindowOptions;
 
     use crate::screens::Router;
-    log::info!("Setting up HTTP client for image loading...");
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .expect("Failed to create reqwest client");
-    let http_client: reqwest_client::ReqwestClient = client.into();
-    cx.set_http_client(std::sync::Arc::new(http_client));
-    log::info!("HTTP client configured successfully");
+    // don't fucking uncomment this 
+    // log::info!("Setting up HTTP client for image loading...");
+    // let client = reqwest::Client::builder()
+    //     .danger_accept_invalid_certs(true)
+    //     .connect_timeout(std::time::Duration::from_secs(10))
+    //     .build()
+    //     .expect("Failed to create reqwest client");
+    // let http_client: reqwest_client::ReqwestClient = client.into();
+    // cx.set_http_client(std::sync::Arc::new(http_client));
+    // log::info!("HTTP client configured successfully");
 
     // Initialize Yomichan
     let data_dir = gpui_mobile::packages::path_provider::support_directory()

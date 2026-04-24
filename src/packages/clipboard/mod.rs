@@ -3,6 +3,7 @@
 //! Provides a cross-platform clipboard API backed by:
 //! - Android: ClipboardManager via JNI (through a Java helper)
 //! - iOS: UIPasteboard via Objective-C
+//! - Desktop: arboard
 //!
 //! Feature-gated behind `clipboard`.
 
@@ -10,6 +11,8 @@
 mod android;
 #[cfg(target_os = "ios")]
 mod ios;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+mod desktop;
 
 /// Copy text to the clipboard.
 pub fn set_text(text: &str) -> Result<(), String> {
@@ -23,8 +26,7 @@ pub fn set_text(text: &str) -> Result<(), String> {
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
-        let _ = text;
-        Err("clipboard is only available on iOS and Android".into())
+        desktop::set_text(text)
     }
 }
 
@@ -40,11 +42,11 @@ pub fn get_text() -> Result<Option<String>, String> {
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
-        Err("clipboard is only available on iOS and Android".into())
+        desktop::get_text()
     }
 }
 
-/// Check if the clipboard has text content.
+/// Check if the clipboard has text.
 pub fn has_text() -> Result<bool, String> {
     #[cfg(target_os = "ios")]
     {
@@ -56,6 +58,6 @@ pub fn has_text() -> Result<bool, String> {
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
-        Err("clipboard is only available on iOS and Android".into())
+        desktop::has_text()
     }
 }

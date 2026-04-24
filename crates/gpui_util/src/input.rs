@@ -18,10 +18,12 @@ pub fn set_text_input_callback(callback: Option<TextInputCallbackFn>) {
 pub fn dispatch_text_input(text: &str) -> bool {
     TEXT_INPUT_CALLBACK.with(|cb| {
         if let Some(callback) = cb.borrow_mut().as_mut() {
+            log::info!("dispatch_text_input: found callback. Text to process: '{}'", text);
             callback(text);
             TEXT_INPUT_DIRTY.store(true, Ordering::Release);
             true
         } else {
+            log::info!("dispatch_text_input: NO callback found on thread: {:?}", std::thread::current().id());
             false
         }
     })
