@@ -98,6 +98,19 @@ impl std::ops::Deref for GlobalPendingCards {
     }
 }
 
+pub mod db;
+use db::PendingNotesDb;
+
+#[derive(Clone)]
+pub struct GlobalPendingNotesDb(pub PendingNotesDb);
+impl gpui::Global for GlobalPendingNotesDb {}
+impl std::ops::Deref for GlobalPendingNotesDb {
+    type Target = PendingNotesDb;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Android entry point
 // ═══════════════════════════════════════════════════════════════════════════
@@ -278,7 +291,7 @@ pub fn open_main_window(cx: &mut App) {
     }
     log::info!("Yomichan data directory: {:?}", data_dir);
 
-    let yomichan_instance = Yomichan::new(data_dir).expect("Failed to initialize Yomichan");
+    let yomichan_instance = Yomichan::new(&data_dir).expect("Failed to initialize Yomichan");
     let yomichan_lock = Arc::new(parking_lot::RwLock::new(yomichan_instance.into()));
 
     // Ensure default language is set to avoid panics
@@ -300,7 +313,9 @@ pub fn open_main_window(cx: &mut App) {
 
     cx.set_global(GlobalYomichan(yomichan_lock));
     cx.set_global(GlobalPendingCards(Arc::new(parking_lot::RwLock::new(Vec::new()))));
-    log::info!("Successfully initialized GlobalYomichan and GlobalPendingCards");
+    let db = PendingNotesDb::new(data_dir.join("pending_notes.db"));
+    cx.set_global(GlobalPendingNotesDb(db));
+    log::info!("Successfully initialized GlobalYomichan, GlobalPendingCards, and GlobalPendingNotesDb");
 
     // Check if the app was launched via a deeplink and determine the initial screen.
     let initial_screen = match gpui_mobile::packages::deeplink::get_initial_link() {
