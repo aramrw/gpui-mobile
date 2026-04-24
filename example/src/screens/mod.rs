@@ -594,6 +594,15 @@ impl Router {
                     cx.notify();
                 }),
             )
+            .item(
+                "🃏",
+                "Anki",
+                current == Screen::Anki,
+                cx.listener(move |this, _, _, cx| {
+                    this.navigate_to(Screen::Anki);
+                    cx.notify();
+                }),
+            )
             .build()
     }
 

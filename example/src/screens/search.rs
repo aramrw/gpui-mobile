@@ -12,7 +12,7 @@ use std::sync::LazyLock;
 use yomichan_rs::{SearchResult, TermSearchResultsSegment};
 
 use super::Router;
-use crate::GlobalYomichan;
+use crate::{GlobalPendingCards, GlobalYomichan};
 
 pub static CLEANUP_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[[:punct:]]").unwrap());
 
@@ -478,6 +478,24 @@ fn render_dictionary_entry(
         )
     });
 
+    let entry_clone = entry.clone();
+    let pending_cards = cx.global::<GlobalPendingCards>().clone();
+    let add_to_anki = div()
+        .px_2()
+        .py_1()
+        .rounded_lg()
+        .bg(rgb(theme.primary))
+        .text_color(rgb(theme.on_primary))
+        .child("Add to Anki")
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(move |_, _, _, _| {
+                let mut cards = pending_cards.write();
+                cards.push(entry_clone.clone());
+                log::info!("Added entry to Anki drafts");
+            }),
+        );
+
     div()
         .flex()
         .flex_col()
@@ -488,20 +506,26 @@ fn render_dictionary_entry(
         .child(
             div()
                 .flex()
-                .flex_col()
+                .justify_between()
                 .child(
                     div()
-                        .text_sm()
-                        .text_color(rgb(theme.secondary))
-                        .child(reading_view),
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(theme.secondary))
+                                .child(reading_view),
+                        )
+                        .child(
+                            div()
+                                .text_2xl()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(rgb(theme.primary))
+                                .child(term_view),
+                        ),
                 )
-                .child(
-                    div()
-                        .text_2xl()
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(rgb(theme.primary))
-                        .child(term_view),
-                ),
+                .child(add_to_anki),
         )
         .children(definitions)
 }
