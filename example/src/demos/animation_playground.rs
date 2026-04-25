@@ -355,7 +355,7 @@ impl AnimationPlayground {
                             .px_4()
                             .py_2()
                             .bg(hsla(0.0, 0.0, 0.1, 0.8))
-                            .rounded_lg()
+                            .rounded_sm()
                             .text_color(rgb(TEXT))
                             .text_sm()
                             .child("Tap to burst, drag to throw balls"),
@@ -519,7 +519,7 @@ impl gpui::Render for AnimationPlayground {
                             .px_4()
                             .py_2()
                             .bg(hsla(0.0, 0.0, 0.1, 0.8))
-                            .rounded_lg()
+                            .rounded_sm()
                             .text_color(rgb(TEXT))
                             .text_sm()
                             .child("Tap to burst, drag to throw balls"),

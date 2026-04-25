@@ -154,13 +154,13 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                         .items_center()
                         .gap_3()
                         .p_3()
-                        .rounded_xl()
+                        .rounded_sm()
                         .bg(rgb(card_bg))
                         .border_l_4()
                         .border_color(rgb(accent))
                         .child(
                             div()
-                                .text_xl()
+                                .text_sm()
                                 .text_color(rgb(if is_current { BLUE } else { sub_text }))
                                 .child("♫"),
                         )
@@ -196,7 +196,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                 .flex_col()
                 .gap_3()
                 .p_4()
-                .rounded_xl()
+                .rounded_sm()
                 .bg(rgb(card_bg))
                 // Track name
                 .child(
@@ -276,7 +276,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                         // Previous
                         .child(
                             div()
-                                .text_2xl()
+                                .text_sm()
                                 .text_color(rgb(text_color))
                                 .child("⏮")
                                 .on_mouse_down(
@@ -293,7 +293,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                         // Rewind 10s
                         .child(
                             div()
-                                .text_xl()
+                                .text_sm()
                                 .text_color(rgb(text_color))
                                 .child("-10s")
                                 .on_mouse_down(
@@ -321,7 +321,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                                 .justify_center()
                                 .child(
                                     div()
-                                        .text_2xl()
+                                        .text_sm()
                                         .text_color(rgb(0xFFFFFF))
                                         .child(if is_playing { "⏸" } else { "▶" }),
                                 )
@@ -345,7 +345,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                         // Forward 10s
                         .child(
                             div()
-                                .text_xl()
+                                .text_sm()
                                 .text_color(rgb(text_color))
                                 .child("+10s")
                                 .on_mouse_down(
@@ -365,7 +365,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                         // Next
                         .child(
                             div()
-                                .text_2xl()
+                                .text_sm()
                                 .text_color(rgb(text_color))
                                 .child("⏭")
                                 .on_mouse_down(
@@ -413,7 +413,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                 .flex_col()
                 .gap_2()
                 .p_4()
-                .rounded_xl()
+                .rounded_sm()
                 .bg(rgb(card_bg))
                 .child(
                     div()
@@ -473,7 +473,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                 .flex_col()
                 .gap_2()
                 .p_4()
-                .rounded_xl()
+                .rounded_sm()
                 .bg(rgb(card_bg))
                 .child(
                     div()
@@ -513,7 +513,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
                 .flex_col()
                 .gap_2()
                 .p_4()
-                .rounded_xl()
+                .rounded_sm()
                 .bg(rgb(card_bg))
                 .child(
                     div()
@@ -554,7 +554,7 @@ pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoEleme
             d.child(
                 div()
                     .p_3()
-                    .rounded_xl()
+                    .rounded_sm()
                     .bg(rgb(0x3D1111))
                     .child(
                         div()
@@ -590,7 +590,7 @@ fn volume_btn(
     div()
         .px_3()
         .py_1()
-        .rounded_lg()
+        .rounded_sm()
         .bg(rgb(BLUE))
         .child(
             div()
@@ -621,7 +621,7 @@ fn speed_btn(
     div()
         .px_3()
         .py_1()
-        .rounded_lg()
+        .rounded_sm()
         .bg(rgb(MAUVE))
         .child(
             div()
@@ -654,7 +654,7 @@ fn loop_btn(
     div()
         .px_3()
         .py_1()
-        .rounded_lg()
+        .rounded_sm()
         .bg(rgb(bg))
         .child(
             div()

@@ -5,7 +5,10 @@
 
 use gpui::{div, prelude::*, px, rgb, App, MouseDownEvent, Window};
 
-use super::{Router, BLUE, GREEN, LIGHT_CARD_BG, LIGHT_DIVIDER, LIGHT_SUBTEXT, LIGHT_TEXT, MANTLE, MAUVE, PEACH, RED, SURFACE0, SURFACE1, TEXT, YELLOW};
+use super::{
+    Router, BLUE, GREEN, LIGHT_CARD_BG, LIGHT_DIVIDER, LIGHT_SUBTEXT, LIGHT_TEXT, MANTLE, MAUVE,
+    PEACH, RED, SURFACE0, SURFACE1, TEXT, YELLOW,
+};
 
 /// Render the Settings screen content area.
 ///
@@ -14,7 +17,11 @@ use super::{Router, BLUE, GREEN, LIGHT_CARD_BG, LIGHT_DIVIDER, LIGHT_SUBTEXT, LI
 pub fn render(router: &Router, cx: &mut gpui::Context<Router>) -> impl IntoElement {
     let dark_mode = router.dark_mode;
     let text_color = if dark_mode { TEXT } else { LIGHT_TEXT };
-    let sub_text = if dark_mode { super::SUBTEXT } else { LIGHT_SUBTEXT };
+    let sub_text = if dark_mode {
+        super::SUBTEXT
+    } else {
+        LIGHT_SUBTEXT
+    };
     let card_bg = if dark_mode { SURFACE0 } else { LIGHT_CARD_BG };
     let divider_color = if dark_mode { SURFACE1 } else { LIGHT_DIVIDER };
 
@@ -171,7 +178,7 @@ fn settings_card(bg: u32) -> gpui::Div {
     div()
         .flex()
         .flex_col()
-        .rounded_xl()
+        .rounded_sm()
         .bg(rgb(bg))
         .overflow_hidden()
 }
@@ -202,7 +209,7 @@ fn toggle_row(
         .gap_3()
         .px_4()
         .py_3()
-        .child(div().text_xl().child(icon.to_string()))
+        .child(div().text_sm().child(icon.to_string()))
         .child(
             div()
                 .flex()
@@ -252,7 +259,7 @@ fn action_row(
         .gap_3()
         .px_4()
         .py_3()
-        .child(div().text_xl().child(icon.to_string()))
+        .child(div().text_sm().child(icon.to_string()))
         .child(
             div()
                 .flex()
@@ -283,7 +290,7 @@ fn colour_chip(color: u32, label: &str) -> impl IntoElement {
         .flex_col()
         .items_center()
         .gap_1()
-        .child(div().size_8().rounded_lg().bg(rgb(color)))
+        .child(div().size_8().rounded_sm().bg(rgb(color)))
         .child(
             div()
                 .text_xs()

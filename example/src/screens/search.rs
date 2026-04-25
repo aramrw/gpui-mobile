@@ -1,5 +1,5 @@
 use gpui::{
-    div, px, rgb, App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement,
+    div, px, rgb, App, AppContext, AsyncApp, Context, Div, Entity, InteractiveElement, IntoElement,
     MouseDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Task,
     WeakEntity,
 };
@@ -9,17 +9,17 @@ use gpui_mobile::{set_text_input_callback, show_keyboard};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
-use yomichan_rs::TermSearchResultsSegment;
+use yomichan_rs::{SearchResult, TermDictionaryEntry, TermSearchResultsSegment};
 
 use super::Router;
-use crate::GlobalYomichan;
+use crate::{GlobalPendingCards, GlobalYomichan};
 
 pub static CLEANUP_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[[:punct:]]").unwrap());
 
 pub struct SearchState {
     pub query: TextField,
     pub focused: bool,
-    pub search_results: Option<Vec<TermSearchResultsSegment>>,
+    pub search_results: Option<SearchResult>,
     pub search_task: Option<Task<()>>,
     pub selected_term_index: Option<usize>,
     pub view_cache: HashMap<String, Entity<SelectableTextView>>,
@@ -71,7 +71,7 @@ impl SearchState {
                         .await;
 
                     let _ = this_handle.update(&mut cx, |this, cx| {
-                        this.search_results = results;
+                        this.search_results = results.ok();
                         this.view_cache.clear();
                         if this.selected_term_index.is_none() && this.search_results.is_some() {
                             this.selected_term_index = Some(0);
@@ -112,6 +112,7 @@ pub fn render(
     router: &super::Router,
     cx: &mut Context<super::Router>,
 ) -> impl IntoElement {
+    super::form::drain_pending_text();
     let dark_mode = router.dark_mode;
     let theme = MaterialTheme::from_appearance(dark_mode);
 
@@ -119,7 +120,7 @@ pub fn render(
         String,
         usize,
         bool,
-        Option<Vec<TermSearchResultsSegment>>,
+        Option<SearchResult>,
         Option<usize>,
         bool,
     ) = {
@@ -280,22 +281,18 @@ pub fn render(
                     }),
                 )
                 .child(if let Some(results) = results {
-                    if results.is_empty() {
-                        div().px_4().child("No results found.")
-                    } else if let Some(selected_index) = selected_index {
-                        if let Some(segment) = results.get(selected_index) {
+                    if let Some(selected_index) = selected_index {
+                        if let Some(segment) = results.segments.get(selected_index) {
                             let search_state = search_state.clone();
                             let mut dictionary_entries = Vec::new();
-                            if let Some(r) = &segment.results {
-                                for (entry_idx, entry) in r.dictionary_entries.iter().enumerate() {
-                                    dictionary_entries.push(render_dictionary_entry(
-                                        entry,
-                                        entry_idx,
-                                        theme,
-                                        &search_state,
-                                        cx,
-                                    ));
-                                }
+                            for (entry_idx, entry) in segment.entries.iter().enumerate() {
+                                dictionary_entries.push(render_dictionary_entry(
+                                    entry,
+                                    entry_idx,
+                                    theme,
+                                    &search_state,
+                                    cx,
+                                ));
                             }
                             div()
                                 .flex()
@@ -310,7 +307,7 @@ pub fn render(
                         div().px_4().child("Select a word above")
                     }
                 } else {
-                    div()
+                    div().px_4().child("No results found.")
                 }),
         )
 }
@@ -338,57 +335,103 @@ fn render_segment_selector(
         let state = search_state.read(cx);
         (state.search_results.clone(), state.selected_term_index)
     };
-    let search_state_handle = search_state.clone();
-
-    if let Some(results) = results {
-        div()
+    match results {
+        Some(results) => div()
             .flex()
             .flex_row()
             .flex_wrap()
             .gap_2()
             .px_2()
             .py_2()
-            .children(results.into_iter().enumerate().filter_map(|(i, segment)| {
-                if segment.text.trim().is_empty() {
-                    return None;
-                }
-                let is_selected = Some(i) == selected_index;
-                let search_state_handle = search_state_handle.clone();
-                let text = segment.text.clone();
+            .children(
+                results
+                    .segments
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, segment)| {
+                        if segment.text.trim().is_empty() {
+                            return None;
+                        }
 
-                Some(
-                    div()
-                        .px_2()
-                        .py_0p5()
-                        .rounded_xl()
-                        .bg(rgb(if is_selected {
-                            theme.primary_container
-                        } else {
-                            theme.surface_container_high
-                        }))
-                        .text_color(rgb(if is_selected {
-                            theme.on_primary_container
-                        } else {
-                            theme.on_surface
-                        }))
-                        .text_xl()
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .child(text)
-                        .on_mouse_down(
-                            gpui::MouseButton::Left,
-                            cx.listener(move |_, _, _, cx| {
-                                let _ = search_state_handle.update(cx, |state, cx| {
-                                    state.selected_term_index = Some(i);
-                                    state.view_cache.clear();
-                                    cx.notify();
-                                });
-                            }),
-                        ),
-                )
-            }))
-    } else {
-        div()
+                        let is_selected = Some(i) == selected_index;
+                        let search_state_handle = search_state.clone();
+                        let text = segment.text;
+
+                        Some(render_segment(
+                            i,
+                            text.clone(),
+                            is_selected,
+                            theme,
+                            search_state.clone(),
+                            cx,
+                        ))
+                    }),
+            ),
+        None => div(),
     }
+}
+
+fn render_segment(
+    index: usize,
+    text: String,
+    is_selected: bool,
+    theme: MaterialTheme,
+    search_state: Entity<SearchState>,
+    cx: &mut Context<Router>,
+) -> Div {
+    div()
+        .px_2()
+        .py_0p5()
+        .rounded_sm()
+        .bg(rgb(if is_selected {
+            theme.primary_container
+        } else {
+            theme.surface_container_high
+        }))
+        .text_color(rgb(if is_selected {
+            theme.on_primary_container
+        } else {
+            theme.on_surface
+        }))
+        .text_sm()
+        .font_weight(gpui::FontWeight::BOLD)
+        .child(text)
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(move |_, _, _, cx| {
+                let _ = search_state.update(cx, |state, cx| {
+                    state.selected_term_index = Some(index);
+                    state.view_cache.clear();
+                    cx.notify();
+                });
+            }),
+        )
+}
+
+fn add_to_anki_btn(
+    entry: &TermDictionaryEntry,
+    cx: &mut Context<Router>,
+    theme: MaterialTheme,
+) -> Div {
+    let entry_clone = entry.clone();
+    let pending_cards = cx.global::<GlobalPendingCards>().clone();
+    div()
+        .h(px(35.0))
+        .px_0p5()
+        .py_0p5()
+        .rounded_sm()
+        .bg(rgb(theme.outline))
+        .text_color(rgb(theme.on_primary))
+        .child("🃏")
+        .hover(|sf| sf.opacity(0.5))
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(move |_, _, _, _| {
+                let mut cards = pending_cards.write();
+                cards.push(entry_clone.clone());
+                log::info!("Added entry to Anki drafts");
+            }),
+        )
 }
 
 fn render_dictionary_entry(
@@ -461,30 +504,38 @@ fn render_dictionary_entry(
         )
     });
 
+    let add_to_anki_btn = add_to_anki_btn(entry, cx, theme);
+
     div()
         .flex()
         .flex_col()
         .bg(rgb(theme.surface_container_high))
         .p_4()
-        .rounded_2xl()
+        .rounded_sm()
         .gap_2()
         .child(
             div()
                 .flex()
-                .flex_col()
+                .justify_between()
                 .child(
                     div()
-                        .text_sm()
-                        .text_color(rgb(theme.secondary))
-                        .child(reading_view),
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .text_lg()
+                                .text_color(rgb(theme.secondary))
+                                .child(reading_view),
+                        )
+                        .child(
+                            div()
+                                .text_3xl()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(rgb(theme.primary))
+                                .child(term_view),
+                        ),
                 )
-                .child(
-                    div()
-                        .text_2xl()
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(rgb(theme.primary))
-                        .child(term_view),
-                ),
+                .child(add_to_anki_btn),
         )
         .children(definitions)
 }

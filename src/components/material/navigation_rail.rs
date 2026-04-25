@@ -575,7 +575,7 @@ pub fn navigation_rail_demo(dark: bool) -> impl IntoElement {
                                 .menu_icon("☰", |_, _, _| {})
                                 .fab("✏️", |_, _, _| {})
                                 .item("🏠", "Home", true, |_, _, _| {})
-                                .item_with_badge("🔍", "Search", false, "", |_, _, _| {})
+                                .item_with_badge("⌕", "Search", false, "", |_, _, _| {})
                                 .item_with_badge("📚", "Library", false, "3", |_, _, _| {})
                                 .item("👤", "Profile", false, |_, _, _| {}),
                         ),
@@ -604,7 +604,7 @@ pub fn navigation_rail_demo(dark: bool) -> impl IntoElement {
                             NavigationRail::new(theme)
                                 .compact(true)
                                 .item("🏠", "Home", true, |_, _, _| {})
-                                .item("🔍", "Search", false, |_, _, _| {})
+                                .item("⌕", "Search", false, |_, _, _| {})
                                 .item("📚", "Library", false, |_, _, _| {})
                                 .item("👤", "Profile", false, |_, _, _| {}),
                         ),
@@ -633,7 +633,7 @@ pub fn navigation_rail_demo(dark: bool) -> impl IntoElement {
                             NavigationRail::new(theme)
                                 .label_mode(RailLabelMode::Selected)
                                 .item("🏠", "Home", false, |_, _, _| {})
-                                .item("🔍", "Search", true, |_, _, _| {})
+                                .item("⌕", "Search", true, |_, _, _| {})
                                 .item("📚", "Library", false, |_, _, _| {})
                                 .item("👤", "Profile", false, |_, _, _| {}),
                         ),

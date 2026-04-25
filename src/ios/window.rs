@@ -27,7 +27,7 @@ use objc::{
     class,
     declare::ClassDecl,
     msg_send,
-    runtime::{Class, Object, Sel, BOOL, NO, YES},
+    runtime::{Class, Object, Sel, BOOL, NO, YES, sel_getName},
     sel, sel_impl,
 };
 use parking_lot::Mutex;
@@ -295,6 +295,45 @@ fn register_text_input_view_class() -> &'static Class {
             }
         }
 
+        // BOOL canPerformAction:(SEL)action withSender:(id)sender
+        extern "C" fn can_perform_action(this: &Object, _sel: Sel, action: Sel, _sender: *mut Object) -> bool {
+            let action_name = unsafe { std::ffi::CStr::from_ptr(sel_getName(action)).to_string_lossy() };
+            log::info!("GPUITextInputView canPerformAction: {}", action_name);
+            
+            if action == sel!(paste:) {
+                true
+            } else {
+                unsafe {
+                    let superclass = class!(UITextField);
+                    msg_send![super(this, superclass), canPerformAction: action withSender: _sender]
+                }
+            }
+        }
+
+        // void paste:(id)sender
+        extern "C" fn paste(this: &Object, _sel: Sel, _sender: *mut Object) {
+            log::info!("GPUITextInputView paste: triggered");
+            unsafe {
+                let window_ptr: *mut std::ffi::c_void = *this.get_ivar(GPUI_WINDOW_IVAR);
+                if window_ptr.is_null() {
+                    log::warn!("GPUITextInputView paste: no window pointer set");
+                    return;
+                }
+                let window = &*(window_ptr as *const IosWindow);
+
+                let pasteboard: *mut Object = msg_send![class!(UIPasteboard), generalPasteboard];
+                let string: *mut Object = msg_send![pasteboard, string];
+                if !string.is_null() {
+                    let c_str: *const std::ffi::c_char = msg_send![string, UTF8String];
+                    let text = std::ffi::CStr::from_ptr(c_str).to_string_lossy();
+                    log::info!("GPUITextInputView paste: found text: {}", text);
+                    window.handle_text_input_str(&text);
+                } else {
+                    log::info!("GPUITextInputView paste: no string found on pasteboard");
+                }
+            }
+        }
+
         // void onEditingChanged
         extern "C" fn on_editing_changed(this: &Object, _sel: Sel) {
             unsafe {
@@ -385,6 +424,14 @@ fn register_text_input_view_class() -> &'static Class {
             decl.add_method(
                 sel!(replaceRange:withText:),
                 replace_range as extern "C" fn(&Object, Sel, *mut Object, *mut Object),
+            );
+            decl.add_method(
+                sel!(canPerformAction:withSender:),
+                can_perform_action as extern "C" fn(&Object, Sel, Sel, *mut Object) -> bool,
+            );
+            decl.add_method(
+                sel!(paste:),
+                paste as extern "C" fn(&Object, Sel, *mut Object),
             );
             decl.add_method(
                 sel!(canBecomeFirstResponder),

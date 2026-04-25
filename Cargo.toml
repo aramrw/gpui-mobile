@@ -17,7 +17,8 @@ default = ["url_launcher", "shared_preferences", "path_provider",
            "battery", "share", "sensors", "webview", "file_selector", "image_picker", "camera",
            "permission_handler", "notifications", "location", "audio", "video_player",
            "clipboard", "local_auth", "in_app_review", "contacts", "maps_launcher",
-           "calendar", "deeplink", "microphone", "maps", "media_session"]
+           "calendar", "deeplink", "microphone", "maps", "media_session", "font-kit"]
+font-kit = []
 url_launcher = []
 shared_preferences = []
 path_provider = []
@@ -30,7 +31,7 @@ battery = []
 share = []
 sensors = []
 webview = []
-file_selector = []
+file_selector = ["dep:rfd"]
 image_picker = []
 camera = []
 permission_handler = []
@@ -38,7 +39,7 @@ notifications = []
 location = []
 audio = []
 video_player = []
-clipboard = []
+clipboard = ["dep:arboard"]
 local_auth = []
 in_app_review = []
 contacts = []
@@ -60,9 +61,12 @@ log          = { version = "0.4", features = ["kv_unstable_serde", "serde"] }
 parking_lot  = "0.12"
 futures      = "0.3"
 raw-window-handle = "0.6"
-
-# ── GPUI core crate (provides Platform trait, event types, geometry, etc.) ───
+gpui_util    = { path = "crates/gpui_util" }
 gpui = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c", package = "gpui", default-features = false }
+
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+rfd          = { version = "0.15", optional = true }
+arboard      = { version = "3.4", optional = true }
 
 # ── iOS ──────────────────────────────────────────────────────────────────────
 
@@ -88,6 +92,29 @@ smallvec            = { version = "1.6", features = ["union", "const_new"] }
 
 # font-kit (same pin as gpui upstream)
 font-kit = { git = "https://github.com/zed-industries/font-kit", rev = "110523127440aefb11ce0cf280ae7c5071337ec5", package = "zed-font-kit", version = "0.14.1-zed" }
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_macos = { path = "crates/gpui_macos", features = ["font-kit"] }
+dirs = "5"
+cocoa = "0.26"
+metal = "0.33"
+objc = "0.2"
+objc2-app-kit = "0.2.2"
+core-foundation = "0.10"
+core-graphics = "0.24"
+core-text = "21"
+core-video = "0.5"
+dispatch2 = "0.3.1"
+block = "0.1"
+ctor = "0.2"
+parking_lot = "0.12"
+smallvec = "1"
+anyhow = "1"
+log = "0.4"
+futures = "0.3"
+uuid = "1"
 
 # ── Android ──────────────────────────────────────────────────────────────────
 
@@ -125,6 +152,7 @@ async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd
 [patch."https://github.com/zed-industries/zed"]
 gpui_util = { path = "crates/gpui_util" }
 collections = { path = "crates/collections" }
+gpui_macos = { path = "crates/gpui_macos" }
 
 # ── profiles ─────────────────────────────────────────────────────────────────
 

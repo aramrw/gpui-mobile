@@ -283,7 +283,7 @@ impl ShaderShowcase {
                             .px_4()
                             .py_2()
                             .bg(hsla(0.0, 0.0, 0.0, 0.3))
-                            .rounded_lg()
+                            .rounded_sm()
                             .text_color(hsla(0.0, 0.0, 1.0, 0.9))
                             .text_sm()
                             .child("Touch to control gradients & create ripples"),

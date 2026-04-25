@@ -63,8 +63,12 @@ extern crate gpui_mobile;
 pub mod demos;
 pub mod screens;
 
-#[cfg(any(target_os = "ios", target_os = "android"))]
-use gpui::{prelude::*, App, WindowOptions};
+use gpui::{prelude::*, App, WindowOptions, AppContext};
+
+// #[cfg(any(target_os = "ios", target_os = "android"))]
+//
+// #[cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))]
+// use gpui::{App, AppContext};
 
 #[cfg(target_os = "android")]
 use gpui::Application;
@@ -77,10 +81,33 @@ use yomichan_rs::Yomichan;
 
 // --- New Global Definition ---
 #[derive(Clone)]
-pub struct GlobalYomichan(pub Arc<parking_lot::RwLock<Yomichan<'static>>>);
+pub struct GlobalYomichan(pub Arc<parking_lot::RwLock<Yomichan>>);
 impl gpui::Global for GlobalYomichan {}
 impl std::ops::Deref for GlobalYomichan {
-    type Target = Arc<parking_lot::RwLock<Yomichan<'static>>>;
+    type Target = Arc<parking_lot::RwLock<Yomichan>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Clone)]
+pub struct GlobalPendingCards(pub Arc<parking_lot::RwLock<Vec<yomichan_rs::TermDictionaryEntry>>>);
+impl gpui::Global for GlobalPendingCards {}
+impl std::ops::Deref for GlobalPendingCards {
+    type Target = Arc<parking_lot::RwLock<Vec<yomichan_rs::TermDictionaryEntry>>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub mod db;
+use db::PendingNotesDb;
+
+#[derive(Clone)]
+pub struct GlobalPendingNotesDb(pub PendingNotesDb);
+impl gpui::Global for GlobalPendingNotesDb {}
+impl std::ops::Deref for GlobalPendingNotesDb {
+    type Target = PendingNotesDb;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -164,10 +191,17 @@ struct NsLogLogger;
 
 #[cfg(target_os = "ios")]
 impl log::Log for NsLogLogger {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool { true }
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
-            let msg = format!("[{}] {}: {}", record.level(), record.target(), record.args());
+            let msg = format!(
+                "[{}] {}: {}",
+                record.level(),
+                record.target(),
+                record.args()
+            );
             nslog(&msg);
         }
     }
@@ -179,7 +213,9 @@ impl log::Log for NsLogLogger {
 fn nslog(msg: &str) {
     use objc::{class, msg_send, runtime::Object, sel, sel_impl};
     unsafe {
-        extern "C" { fn NSLog(fmt: *mut Object, ...); }
+        extern "C" {
+            fn NSLog(fmt: *mut Object, ...);
+        }
         let c_msg = std::ffi::CString::new(msg).unwrap_or_default();
         let ns_msg: *mut Object = msg_send![class!(NSString), alloc];
         let ns_msg: *mut Object = msg_send![ns_msg, initWithUTF8String: c_msg.as_ptr()];
@@ -225,22 +261,27 @@ pub fn ios_main() {
 ///
 /// If the app was launched via a deeplink (e.g. `gpui://video_player`),
 /// the router starts on the corresponding screen.
-#[cfg(any(target_os = "ios", target_os = "android"))]
-fn open_main_window(cx: &mut App) {
+#[cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))]
+pub fn open_main_window(cx: &mut App) {
     // Set up HTTP client so gpui::img() can fetch remote images (e.g. picsum.photos).
     // We build the reqwest client ourselves so we can skip TLS cert verification.
     // On iOS, rustls-native-certs fails to load system root certs, causing all
     // HTTPS requests to fail with "UnknownIssuer". Since this is a demo app,
     // disabling cert verification is acceptable.
-    log::info!("Setting up HTTP client for image loading...");
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .expect("Failed to create reqwest client");
-    let http_client: reqwest_client::ReqwestClient = client.into();
-    cx.set_http_client(std::sync::Arc::new(http_client));
-    log::info!("HTTP client configured successfully");
+
+    use gpui::WindowOptions;
+
+    use crate::screens::Router;
+    // don't fucking uncomment this
+    // log::info!("Setting up HTTP client for image loading...");
+    // let client = reqwest::Client::builder()
+    //     .danger_accept_invalid_certs(true)
+    //     .connect_timeout(std::time::Duration::from_secs(10))
+    //     .build()
+    //     .expect("Failed to create reqwest client");
+    // let http_client: reqwest_client::ReqwestClient = client.into();
+    // cx.set_http_client(std::sync::Arc::new(http_client));
+    // log::info!("HTTP client configured successfully");
 
     // Initialize Yomichan
     let data_dir = gpui_mobile::packages::path_provider::support_directory()
@@ -251,13 +292,13 @@ fn open_main_window(cx: &mut App) {
         std::fs::create_dir_all(&data_dir).expect("could not create data dir");
     }
     log::info!("Yomichan data directory: {:?}", data_dir);
-    
-    let yomichan_instance = Yomichan::new(data_dir).expect("Failed to initialize Yomichan");
+
+    let yomichan_instance = Yomichan::new(&data_dir).expect("Failed to initialize Yomichan");
     let yomichan_lock = Arc::new(parking_lot::RwLock::new(yomichan_instance.into()));
-    
+
     // Ensure default language is set to avoid panics
     {
-        let mut ycd: parking_lot::RwLockWriteGuard<yomichan_rs::Yomichan<'static>> = yomichan_lock.write();
+        let mut ycd: parking_lot::RwLockWriteGuard<yomichan_rs::Yomichan> = yomichan_lock.write();
         let current_lang = {
             let opts_ptr = ycd.options();
             let opts = opts_ptr.read();
@@ -266,13 +307,17 @@ fn open_main_window(cx: &mut App) {
             prof.options().general().language.clone()
         };
         if current_lang.is_empty() {
-            ycd.set_language("ja").expect("failed to set default language");
+            ycd.set_language("ja")
+                .expect("failed to set default language");
             let _ = ycd.update_options();
         }
     }
 
     cx.set_global(GlobalYomichan(yomichan_lock));
-    log::info!("Successfully initialized GlobalYomichan");
+    cx.set_global(GlobalPendingCards(Arc::new(parking_lot::RwLock::new(Vec::new()))));
+    let db = PendingNotesDb::new(data_dir.join("pending_notes.db"));
+    cx.set_global(GlobalPendingNotesDb(db));
+    log::info!("Successfully initialized GlobalYomichan, GlobalPendingCards, and GlobalPendingNotesDb");
 
     // Check if the app was launched via a deeplink and determine the initial screen.
     let initial_screen = match gpui_mobile::packages::deeplink::get_initial_link() {
@@ -296,7 +341,12 @@ fn open_main_window(cx: &mut App) {
             window_bounds: None,
             ..Default::default()
         },
-        |window, cx| cx.new(|cx| Router::with_initial_screen(initial_screen, window, cx)),
+        |window, cx| {
+            #[cfg(target_os = "macos")]
+            log::info!("macOS: Input handling not yet mapped to gpui-mobile-example event loop.");
+
+            cx.new(|cx| Router::with_initial_screen(initial_screen, window, cx))
+        },
     ) {
         Ok(_handle) => {
             #[cfg(target_os = "android")]

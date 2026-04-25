@@ -23,6 +23,7 @@ impl SettingsState {
     }
 
     pub fn switch_profile(name: String, router: &Entity<super::Router>, cx: &mut gpui::App) {
+        log::info!("Switching profile to: {}", name);
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         {
             let ycd = global_yomichan.read();
@@ -30,7 +31,10 @@ impl SettingsState {
             {
                 let mut opts_guard = opts.write();
                 if let Some(idx) = opts_guard.profiles.get_index_of(&name) {
+                    log::info!("Found profile index: {}", idx);
                     opts_guard.current_profile = idx;
+                } else {
+                    log::warn!("Profile not found: {}", name);
                 }
             }
             let _ = ycd.update_options();
@@ -52,24 +56,28 @@ impl SettingsState {
         }
 
         let name = self.new_profile_name.text.clone();
+        log::info!("Adding profile: {}", name);
         let global_yomichan = cx.global::<GlobalYomichan>().clone();
         {
             let ycd = global_yomichan.read();
             let opts = ycd.options();
             {
                 let mut opts_guard = opts.write();
-                
+
                 if !opts_guard.profiles.contains_key(&name) {
+                    log::info!("Profile {} does not exist, creating it.", name);
                     let current_profile = opts_guard.profiles.get_index(opts_guard.current_profile).map(|(_, v)| v.clone()).unwrap_or_default();
                     opts_guard.profiles.insert(name.clone(), current_profile);
                     if let Some(idx) = opts_guard.profiles.get_index_of(&name) {
+                        log::info!("Created and switching to profile index: {}", idx);
                         opts_guard.current_profile = idx;
                     }
+                } else {
+                    log::warn!("Profile {} already exists.", name);
                 }
             }
             let _ = ycd.update_options();
         }
-        
         self.new_profile_name.text.clear();
         self.new_profile_name.cursor = 0;
         self.show_add_profile_modal = false;
@@ -126,7 +134,8 @@ pub fn render(
         .relative()
         .flex()
         .flex_col()
-        .size_full()
+        //.size_full()
+        .overflow_y_scroll()
         .child(
             div()
                 .flex()
@@ -312,7 +321,7 @@ fn render_add_profile_modal(
             div()
                 .w(px(300.0))
                 .p_6()
-                .rounded_xl()
+                .rounded_sm()
                 .bg(rgb(theme.surface_container_high))
                 .flex()
                 .flex_col()
@@ -415,7 +424,7 @@ fn settings_card(bg: u32) -> gpui::Div {
     div()
         .flex()
         .flex_col()
-        .rounded_xl()
+        .rounded_sm()
         .bg(rgb(bg))
 }
 
@@ -462,7 +471,7 @@ fn toggle_row(
             div()
                 .px_2()
                 .py_0p5()
-                .rounded_xl()
+                .rounded_sm()
                 .bg(rgb(toggle_bg))
                 .text_xs()
                 .text_color(rgb(toggle_text))

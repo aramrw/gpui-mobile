@@ -144,7 +144,7 @@ impl DemoApp {
                     .flex_col()
                     .items_center()
                     .gap_2()
-                    .child(div().text_3xl().text_color(rgb(TEXT)).child("GPUI on iOS"))
+                    .child(div().text_xl().text_color(rgb(TEXT)).child("GPUI on iOS"))
                     .child(
                         div()
                             .text_lg()
@@ -168,12 +168,12 @@ impl DemoApp {
                             .px_6()
                             .py_4()
                             .bg(rgb(SURFACE))
-                            .rounded_xl()
+                            .rounded_sm()
                             .border_l_4()
                             .border_color(rgb(BLUE))
                             .child(
                                 div()
-                                    .text_xl()
+                                    .text_sm()
                                     .text_color(rgb(TEXT))
                                     .child("Animation Playground"),
                             )
@@ -199,12 +199,12 @@ impl DemoApp {
                             .px_6()
                             .py_4()
                             .bg(rgb(SURFACE))
-                            .rounded_xl()
+                            .rounded_sm()
                             .border_l_4()
                             .border_color(rgb(MAUVE))
                             .child(
                                 div()
-                                    .text_xl()
+                                    .text_sm()
                                     .text_color(rgb(TEXT))
                                     .child("Shader Showcase"),
                             )
@@ -344,7 +344,7 @@ where
         .px_4()
         .py_2()
         .bg(hsla(0.0, 0.0, 0.2, 0.8))
-        .rounded_lg()
+        .rounded_sm()
         .text_color(rgb(TEXT))
         .child("< Back")
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {

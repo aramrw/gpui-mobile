@@ -12,6 +12,8 @@
 mod android;
 #[cfg(target_os = "ios")]
 mod ios;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod desktop;
 
 /// A group of file type filters.
 ///
@@ -72,8 +74,7 @@ pub async fn open_file(options: OpenFileOptions) -> Result<Option<SelectedFile>,
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
-        let _ = options;
-        Err("file_selector is only available on iOS and Android".into())
+        desktop::open_file(options).await
     }
 }
 
@@ -91,8 +92,7 @@ pub async fn open_files(options: OpenFileOptions) -> Result<Vec<SelectedFile>, S
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
-        let _ = options;
-        Err("file_selector is only available on iOS and Android".into())
+        desktop::open_files(options).await
     }
 }
 
@@ -110,8 +110,7 @@ pub fn get_save_path(options: &SaveFileOptions) -> Result<Option<String>, String
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
-        let _ = options;
-        Err("file_selector is only available on iOS and Android".into())
+        desktop::get_save_path(options)
     }
 }
 
@@ -129,7 +128,6 @@ pub fn get_directory_path(initial_directory: Option<&str>) -> Result<Option<Stri
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
-        let _ = initial_directory;
-        Err("file_selector is only available on iOS and Android".into())
+        desktop::get_directory_path(initial_directory)
     }
 }

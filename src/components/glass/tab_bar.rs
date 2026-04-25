@@ -73,7 +73,7 @@ pub fn tab_bar(dark: bool) -> impl IntoElement {
         .border_t_1()
         .border_color(border)
         .child(tab("🏠", "Home", true))
-        .child(tab("🔍", "Search", false))
+        .child(tab("⌕", "Search", false))
         .child(tab("❤️", "Favorites", false))
         .child(tab("👤", "Profile", false))
 }

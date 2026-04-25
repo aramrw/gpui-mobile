@@ -2321,7 +2321,7 @@ pub fn list_tile_demo(dark: bool) -> impl IntoElement {
                         .border_color(rgb(theme.outline_variant))
                         .child(
                             BottomAppBar::new(theme)
-                                .icon("🔍", false, |_, _, _| {})
+                                .icon("", false, |_, _, _| {})
                                 .icon("📧", false, |_, _, _| {})
                                 .icon("📸", false, |_, _, _| {})
                                 .icon("🗑️", false, |_, _, _| {})

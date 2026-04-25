@@ -39,15 +39,15 @@ pub fn render(router: &Router) -> impl IntoElement {
                         .items_center()
                         .justify_center()
                         .size_20()
-                        .rounded_xl()
+                        .rounded_sm()
                         .bg(rgb(BLUE))
-                        .text_3xl()
+                        .text_sm()
                         .text_color(rgb(MANTLE))
                         .child("G"),
                 )
                 .child(
                     div()
-                        .text_xl()
+                        .text_sm()
                         .text_color(rgb(text_color))
                         .child("GPUI Mobile Example"),
                 )
@@ -318,7 +318,7 @@ fn info_card(bg: u32) -> gpui::Div {
     div()
         .flex()
         .flex_col()
-        .rounded_xl()
+        .rounded_sm()
         .bg(rgb(bg))
         .overflow_hidden()
 }
@@ -344,7 +344,7 @@ fn tech_row(
         .gap_3()
         .px_4()
         .py_3()
-        .child(div().text_xl().child(icon.to_string()))
+        .child(div().text_sm().child(icon.to_string()))
         .child(
             div()
                 .flex()

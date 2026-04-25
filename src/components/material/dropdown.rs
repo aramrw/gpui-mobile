@@ -84,7 +84,7 @@ impl IntoElement for Dropdown {
                     .gap_2()
                     .px_3()
                     .py_1p5()
-                    .rounded_lg()
+                    .rounded_sm()
                     .bg(bg)
                     .border_1()
                     .border_color(color(t.outline_variant))

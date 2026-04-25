@@ -4,7 +4,9 @@
 //! receives text input, and displays the current value with a cursor that
 //! can be positioned within the text.
 
-use gpui::{div, prelude::*, px, rgb, ElementId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
+use gpui::{
+    div, prelude::*, px, rgb, ElementId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+};
 
 use super::theme::MaterialTheme;
 
@@ -141,7 +143,10 @@ impl<V: 'static> TextInput<V> {
     /// Set a simple tap callback that receives the `MouseDownEvent` and `App` for tap
     /// position. Does NOT lease the parent entity — use this instead of
     /// `on_tap` to avoid entity lease conflicts.
-    pub fn on_tap_notify(mut self, handler: impl Fn(&MouseDownEvent, &mut gpui::App) + 'static) -> Self {
+    pub fn on_tap_notify(
+        mut self,
+        handler: impl Fn(&MouseDownEvent, &mut gpui::App) + 'static,
+    ) -> Self {
         self.on_tap_simple = Some(std::rc::Rc::new(handler));
         self
     }
@@ -205,9 +210,9 @@ impl<V: 'static> TextInput<V> {
 
         // Input container
         let mut input_box = div()
-            .px_3()
-            .py_2()
-            .rounded_md()
+            .px_2p5()
+            .py_1p5()
+            .rounded_sm()
             .border_color(rgb(border_color))
             .bg(rgb(t.surface));
 
@@ -427,7 +432,7 @@ pub fn calculate_cursor_offset(
         } else {
             8.0
         };
-        
+
         // We check the distance to the center of the character to decide
         // whether to place the cursor before or after it.
         let char_center_x = current_x + char_width / 2.0;
@@ -435,7 +440,7 @@ pub fn calculate_cursor_offset(
             // Tap is closer to the start of this character
             return idx;
         }
-        
+
         current_x += char_width;
         let dist = (current_x - x).abs();
         if dist < min_dist {
@@ -443,12 +448,12 @@ pub fn calculate_cursor_offset(
             best_index = idx + c.len_utf8();
         }
     }
-    
+
     best_index
 }
 
 fn is_cjk(c: char) -> bool {
-    matches!(c, 
+    matches!(c,
         '\u{3000}'..='\u{303F}' | // CJK Symbols and Punctuation
         '\u{3040}'..='\u{309F}' | // Hiragana
         '\u{30A0}'..='\u{30FF}' | // Katakana

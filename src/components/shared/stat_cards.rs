@@ -1,19 +1,3 @@
-//! Shared stat card components — metric cards with title, value, and trend.
-//!
-//! Stat cards are compact dashboard-style elements that display a key
-//! metric with its current value and a trend indicator. Each card features:
-//!
-//! - A coloured **accent dot** for visual identification
-//! - A **title** label (e.g. "Users", "Revenue")
-//! - A large **value** (e.g. "1.2k", "$4.8k")
-//! - A **trend** string with directional indicator (e.g. "↑ 12%", "↓ 3%")
-//!
-//! Two public functions are provided:
-//!
-//! - [`stat_card`] — a single metric card with configurable colours and content
-//! - [`stat_cards`] — a composite 2×2 grid of example stat cards (Users,
-//!   Revenue, Orders, Rating)
-
 use gpui::{div, prelude::*, px, rgb};
 
 // ── Colour constants (Catppuccin Mocha) ──────────────────────────────────────
@@ -79,7 +63,7 @@ pub fn stat_card(
         .flex_1()
         .gap_2()
         .p_4()
-        .rounded_xl()
+        .rounded_sm()
         .bg(rgb(card_bg))
         .child(
             div()
@@ -97,7 +81,7 @@ pub fn stat_card(
         )
         .child(
             div()
-                .text_xl()
+                .text_sm()
                 .text_color(rgb(text_color))
                 .child(value.to_string()),
         )

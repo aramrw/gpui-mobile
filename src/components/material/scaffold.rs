@@ -373,7 +373,7 @@ pub fn scaffold_demo(dark: bool) -> impl IntoElement {
             div()
                 .text_color(rgb(theme.on_surface_variant))
                 .text_sm()
-                .child("🔍 Search"),
+                .child("⌕ Search"),
         )
         .child(
             div()

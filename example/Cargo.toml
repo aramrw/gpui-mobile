@@ -20,8 +20,10 @@ gpui = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0be
 reqwest_client = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c", package = "reqwest_client" }
 reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662463bda39148ba154100dd44d3fba5873a4", package = "zed-reqwest", default-features = false, features = ["rustls-tls"] }
 log = "0.4"
+env_logger = "0.11"
 yomichan_rs = { path = "../../yomichan_rs", features = ["anki"] }
 parking_lot = { version = "0.12.4", features = ["arc_lock", "serde", "send_guard"] }
+rusqlite = "0.33.0"
 anyhow = "1.0"
 tracing = { version = "0.1", features = ["async-await"] }
 unidecode = "0.3"
@@ -31,8 +33,15 @@ rapidhash = { version = "4.1", features = ["unsafe"] }
 getset = "0.1.6"
 indexmap = { version = "2.7", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
+postcard = { version = "1.1.3", features = ["use-std"] }
+native_model = { version = "0.6.2", features = ["rmp_serde_1_3", "postcard_1_0"] }
+anki_direct = { git = "https://github.com/aramrw/anki_direct", branch = "note", version = "0.0.14" }
+# gpui-component = { path = "../gpui-component-latest" }
 
 [target.'cfg(target_os = "ios")'.dependencies]
+objc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
 
 [target.'cfg(target_os = "android")'.dependencies]
@@ -45,6 +54,7 @@ async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd
 [patch."https://github.com/zed-industries/zed"]
 gpui_util = { path = "../crates/gpui_util" }
 collections = { path = "../crates/collections" }
+gpui_macos = { path = "../crates/gpui_macos" }
 
 [profile.release]
 opt-level = 3

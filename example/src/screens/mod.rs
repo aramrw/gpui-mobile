@@ -13,6 +13,8 @@
 //! - **Shaders** — dynamic gradients, floating orbs, and ripple effects.
 
 pub mod about;
+pub mod anki;
+pub mod anki_settings;
 pub mod audio_player;
 pub mod chat;
 pub mod components;
@@ -31,8 +33,8 @@ pub mod webview_browser;
 
 use crate::demos::{AnimationPlayground, ShaderShowcase};
 use gpui::{
-    div, point, prelude::*, px, rgb, size, Bounds, Context, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, SharedString, Window, Entity,
+    div, point, prelude::*, px, rgb, size, Bounds, Context, Entity, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, SharedString, Window,
 };
 use gpui_mobile::components::material::{MaterialTheme, NavigationBarBuilder, TopAppBar};
 use gpui_mobile::{set_system_chrome, StatusBarContentStyle, SystemChromeStyle};
@@ -61,6 +63,8 @@ pub enum Screen {
     Chat,
     AudioPlayer,
     VideoPlayer,
+    Anki,
+    AnkiSettings,
 }
 
 impl Screen {
@@ -100,6 +104,8 @@ impl Screen {
             "chat" => Some(Screen::Chat),
             "audio_player" | "audio" => Some(Screen::AudioPlayer),
             "video_player" | "video" => Some(Screen::VideoPlayer),
+            "anki" => Some(Screen::Anki),
+            "anki_settings" => Some(Screen::AnkiSettings),
             _ => None,
         }
     }
@@ -125,6 +131,8 @@ impl Screen {
             Screen::Chat => "Sarah Johnson",
             Screen::AudioPlayer => "Audio Player",
             Screen::VideoPlayer => "Video Player",
+            Screen::Anki => "Anki",
+            Screen::AnkiSettings => "Anki Settings",
         }
     }
 
@@ -143,21 +151,21 @@ impl Screen {
 
 // ── Colour palette (Google Material) ─────────────────────────────────────────
 
-pub const BASE: u32 = 0x121318;        // Dark surface
-pub const SURFACE0: u32 = 0x1E1F25;   // Dark surface container
-pub const SURFACE1: u32 = 0x282A2F;   // Dark surface container high
-pub const TEXT: u32 = 0xE2E2E9;       // Dark on-surface
-pub const SUBTEXT: u32 = 0xC4C6D0;    // Dark on-surface-variant
-pub const BLUE: u32 = 0x4285F4;       // Google Blue
-pub const GREEN: u32 = 0x34A853;      // Google Green
-pub const RED: u32 = 0xEA4335;        // Google Red
-pub const MAUVE: u32 = 0xA142F4;      // Google Purple
-pub const YELLOW: u32 = 0xFBBC04;     // Google Yellow
-pub const PEACH: u32 = 0xFA7B17;      // Google Orange
-pub const TEAL: u32 = 0x24C1E0;       // Google Teal
-pub const MANTLE: u32 = 0x0D0E13;     // Dark surface container lowest
-pub const SKY: u32 = 0x4FC3F7;        // Light Blue
-pub const LAVENDER: u32 = 0x7B8CF8;   // Indigo light
+pub const BASE: u32 = 0x121318; // Dark surface
+pub const SURFACE0: u32 = 0x1E1F25; // Dark surface container
+pub const SURFACE1: u32 = 0x282A2F; // Dark surface container high
+pub const TEXT: u32 = 0xE2E2E9; // Dark on-surface
+pub const SUBTEXT: u32 = 0xC4C6D0; // Dark on-surface-variant
+pub const BLUE: u32 = 0x4285F4; // Google Blue
+pub const GREEN: u32 = 0x34A853; // Google Green
+pub const RED: u32 = 0xEA4335; // Google Red
+pub const MAUVE: u32 = 0xA142F4; // Google Purple
+pub const YELLOW: u32 = 0xFBBC04; // Google Yellow
+pub const PEACH: u32 = 0xFA7B17; // Google Orange
+pub const TEAL: u32 = 0x24C1E0; // Google Teal
+pub const MANTLE: u32 = 0x0D0E13; // Dark surface container lowest
+pub const SKY: u32 = 0x4FC3F7; // Light Blue
+pub const LAVENDER: u32 = 0x7B8CF8; // Indigo light
 
 // Light mode equivalents (used inline in screen render functions).
 pub const LIGHT_TEXT: u32 = 0x1A1B20;
@@ -200,6 +208,8 @@ pub struct Router {
 
     // ── Yomichan state ───────────────────────────────────────────────────
     pub search_state: Entity<search::SearchState>,
+    pub anki_state: Entity<anki::AnkiRouter>,
+    pub anki_settings_state: Entity<anki_settings::AnkiSettingsState>,
     pub dictionaries_state: Entity<dictionaries::DictionariesState>,
     settings_state: Entity<settings::SettingsState>,
 
@@ -207,7 +217,6 @@ pub struct Router {
     zoom_header: Entity<gpui_mobile::components::material::ZoomHeader>,
 
     // ── Demo view state ──────────────────────────────────────────────────
-
     /// The animation playground demo (lazily created when the screen is visited).
     animation_playground: Option<AnimationPlayground>,
     /// The shader showcase demo (lazily created when the screen is visited).
@@ -223,7 +232,11 @@ impl Router {
     ///
     /// If the screen is not a tab-root, `Home` is pushed onto the
     /// history stack so the back button works.
-    pub fn with_initial_screen(screen: Screen, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn with_initial_screen(
+        screen: Screen,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let safe_area = Self::query_safe_area();
 
         let user_name = if cfg!(target_os = "ios") {
@@ -240,6 +253,15 @@ impl Router {
         }
 
         let search_state = cx.new(|cx| search::SearchState::new(window, cx));
+        let anki_state = cx.new(|_| anki::AnkiRouter::new());
+        let anki_settings_state = cx.new(|cx| anki_settings::AnkiSettingsState::new(window, cx));
+        let global_yomichan = cx.global::<crate::GlobalYomichan>().clone();
+        anki_settings::AnkiSettingsState::refresh_anki_data(
+            &anki_settings_state,
+            global_yomichan,
+            cx,
+        );
+
         let dictionaries_state = cx.new(|cx| dictionaries::DictionariesState::new(window, cx));
         let settings_state = cx.new(|cx| settings::SettingsState::new(window, cx));
         let zoom_header = cx.new(|_cx| {
@@ -255,6 +277,8 @@ impl Router {
             history,
             safe_area,
             search_state,
+            anki_state,
+            anki_settings_state,
             dictionaries_state,
             settings_state,
             zoom_header,
@@ -295,7 +319,12 @@ impl Router {
         {
             let (top, bottom, left, right) = gpui_mobile::safe_area_insets();
             if top > 0.0 || bottom > 0.0 {
-                return SafeArea { top, bottom, left, right };
+                return SafeArea {
+                    top,
+                    bottom,
+                    left,
+                    right,
+                };
             }
             // Fallback for before the window is ready
             return SafeArea {
@@ -314,13 +343,13 @@ impl Router {
     pub fn navigate_to(&mut self, screen: Screen) {
         if self.current_screen != screen {
             // Dismiss webview when leaving the browser screen
-            if self.current_screen == Screen::WebViewBrowser {
-                webview_browser::dismiss_webview();
-            }
-            // Dismiss video surface when leaving video player
-            if self.current_screen == Screen::VideoPlayer {
-                video_player::dismiss();
-            }
+            // if self.current_screen == Screen::WebViewBrowser {
+            //     webview_browser::dismiss_webview();
+            // }
+            // // Dismiss video surface when leaving video player
+            // if self.current_screen == Screen::VideoPlayer {
+            //     video_player::dismiss();
+            // }
             // Pause audio when leaving audio player
             if self.current_screen == Screen::AudioPlayer {
                 audio_player::dismiss();
@@ -354,13 +383,13 @@ impl Router {
     pub fn go_back(&mut self) -> bool {
         if let Some(prev) = self.history.pop() {
             // Dismiss webview when leaving browser
-            if self.current_screen == Screen::WebViewBrowser {
-                webview_browser::dismiss_webview();
-            }
-            // Dismiss video surface when leaving video player
-            if self.current_screen == Screen::VideoPlayer {
-                video_player::dismiss();
-            }
+            // if self.current_screen == Screen::WebViewBrowser {
+            //     webview_browser::dismiss_webview();
+            // }
+            // // Dismiss video surface when leaving video player
+            // if self.current_screen == Screen::VideoPlayer {
+            //     video_player::dismiss();
+            // }
             // Pause audio when leaving audio player
             if self.current_screen == Screen::AudioPlayer {
                 audio_player::dismiss();
@@ -389,14 +418,17 @@ impl Router {
 
 impl Render for Router {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        log::info!("Router: render() screen={:?}", self.current_screen);
-        
+        // this renders a lot, every click since thats gpui works
+        // , so uncomment if having rout switching problems
+        //log::info!("Router: render() screen={:?}", self.current_screen);
+
         // Apply global font size multiplier
         window.set_rem_size(px(16.0 * self.font_size_multiplier));
 
         let show_tab_bar = self.current_screen.is_tab_root();
-        let theme = gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
-        
+        let theme =
+            gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
+
         // Sync zoom header theme
         let _ = self.zoom_header.update(cx, |this, cx| {
             this.set_theme(theme, cx);
@@ -415,6 +447,9 @@ impl Render for Router {
         // Apply to the OS-level status bar / navigation bar.
         set_system_chrome(&chrome);
 
+        let is_fullscreen_demo =
+            matches!(self.current_screen, Screen::Animations | Screen::Shaders);
+
         div()
             .flex()
             .flex_col()
@@ -425,14 +460,14 @@ impl Render for Router {
             .when(safe_top > 0.0, |d| {
                 d.child(div().w_full().h(px(safe_top)).bg(rgb(top_color)))
             })
-            // ── Top navigation bar ───────────────────────────────────────
-            .child(self.render_nav_bar(cx))
+            // ── Top app bar (iOS only, pushed below safe area) ───────────
+            .when(cfg!(target_os = "ios") && !is_fullscreen_demo, |d| {
+                d.child(self.render_top_bar(cx))
+            })
             // ── Screen content ───────────────────────────────────────────
             .child(self.render_current_screen(window, cx))
             // ── Bottom tab bar (only for tab-root screens) ───────────────
-            .when(show_tab_bar, |d| {
-                d.child(self.render_tab_bar(cx))
-            })
+            .when(show_tab_bar, |d| d.child(self.render_tab_bar(cx)))
             // ── Bottom safe-area spacer (nav bar / gesture indicator) ────
             .when(safe_bottom > 0.0 && show_tab_bar, |d| {
                 d.child(div().w_full().h(px(safe_bottom)).bg(rgb(bottom_color)))
@@ -449,8 +484,10 @@ impl Router {
     /// Default: dark mode → dark status bar with light text; light mode → light
     /// status bar with dark text. Fullscreen demo screens override to dark chrome.
     fn system_chrome_style(&self) -> SystemChromeStyle {
-        let is_fullscreen_demo = matches!(self.current_screen, Screen::Animations | Screen::Shaders);
-        let theme = gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
+        let is_fullscreen_demo =
+            matches!(self.current_screen, Screen::Animations | Screen::Shaders);
+        let theme =
+            gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
 
         if is_fullscreen_demo {
             SystemChromeStyle {
@@ -475,31 +512,6 @@ impl Router {
         }
     }
 
-    /// Render the top navigation bar using the Material Design TopAppBar.
-    fn render_nav_bar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let can_go_back = self.can_go_back();
-        let title = self.current_screen.title();
-        let theme = MaterialTheme::from_appearance(self.dark_mode);
-
-        let mut bar = if can_go_back {
-            TopAppBar::small(title, theme)
-        } else {
-            TopAppBar::center_aligned(title, theme)
-        };
-
-        if can_go_back {
-            bar = bar.leading_icon(
-                "←",
-                cx.listener(|this, _event, _window, cx| {
-                    this.go_back();
-                    cx.notify();
-                }),
-            );
-        }
-
-        bar
-    }
-
     /// Render the content area for the currently active screen.
     ///
     /// Regular screens are wrapped in a scrollable container. Demo screens
@@ -512,7 +524,9 @@ impl Router {
     ) -> impl IntoElement {
         match self.current_screen {
             Screen::Animations => {
-                return self.render_animations_content(window, cx).into_any_element();
+                return self
+                    .render_animations_content(window, cx)
+                    .into_any_element();
             }
             Screen::Shaders => {
                 return self.render_shaders_content(window, cx).into_any_element();
@@ -522,33 +536,18 @@ impl Router {
 
         let screen_content = match self.current_screen {
             Screen::Search => self.render_search_screen(cx).into_any_element(),
+            Screen::Anki => self.render_anki_screen(cx).into_any_element(),
+            Screen::AnkiSettings => self.render_anki_settings_screen(cx).into_any_element(),
             Screen::Dictionaries => self.render_dictionaries_screen(cx).into_any_element(),
             Screen::Settings => self.render_settings_screen(cx).into_any_element(),
             Screen::About => self.render_about_screen(cx).into_any_element(),
-            Screen::Home => self.render_home_screen(cx).into_any_element(),
-            Screen::Counter => self.render_counter_screen(cx).into_any_element(),
-            Screen::AppleGlass => self.render_apple_glass_screen(cx).into_any_element(),
-            Screen::Material => self.render_material_screen(cx).into_any_element(),
-            Screen::Form => self.render_form_screen(cx).into_any_element(),
-            Screen::PackagesDemo => self.render_packages_demo_screen(cx).into_any_element(),
-            Screen::WebViewBrowser => self.render_webview_browser_screen(cx).into_any_element(),
-            Screen::Swiper => self.render_swiper_screen(cx).into_any_element(),
-            Screen::Feed => self.render_feed_screen(cx).into_any_element(),
-            Screen::Chat => self.render_chat_screen(cx).into_any_element(),
-            Screen::AudioPlayer => self.render_audio_player_screen(cx).into_any_element(),
-            Screen::VideoPlayer => {
-                // Video player has its own layout with fixed video area + scrollable controls.
-                // Rendered directly in render_current_screen to bypass the scroll wrapper.
-                return self.render_video_player_screen(window, cx).into_any_element();
-            }
-            Screen::Animations | Screen::Shaders => unreachable!(),
+            _ => panic!("match self.current_screen doesn't have this one"),
         };
 
         div()
             .id("screen-scroll-container")
             .flex_1()
             .overflow_y_scroll()
-            // Dismiss keyboard when tapping outside text input fields.
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|_this, _event: &MouseDownEvent, _window, cx| {
@@ -579,7 +578,7 @@ impl Router {
 
         NavigationBarBuilder::new(dark)
             .item(
-                "🔍",
+                "⌕",
                 "Search",
                 current == Screen::Search,
                 cx.listener(move |this, _, _, cx| {
@@ -588,7 +587,7 @@ impl Router {
                 }),
             )
             .item(
-                "📚",
+                "⌂",
                 "Dicts",
                 current == Screen::Dictionaries,
                 cx.listener(move |this, _, _, cx| {
@@ -597,7 +596,16 @@ impl Router {
                 }),
             )
             .item(
-                "⚙️",
+                "⛩",
+                "Anki",
+                current == Screen::Anki,
+                cx.listener(move |this, _, _, cx| {
+                    this.navigate_to(Screen::Anki);
+                    cx.notify();
+                }),
+            )
+            .item(
+                "☰",
                 "Settings",
                 current == Screen::Settings,
                 cx.listener(move |this, _, _, cx| {
@@ -606,7 +614,7 @@ impl Router {
                 }),
             )
             .item(
-                "ℹ️",
+                "♥",
                 "About",
                 current == Screen::About,
                 cx.listener(move |this, _, _, cx| {
@@ -623,6 +631,14 @@ impl Router {
         search::render(&self.search_state, cx.entity().clone(), self, cx)
     }
 
+    fn render_anki_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        anki::render(&self.anki_state, self, cx)
+    }
+
+    fn render_anki_settings_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        anki_settings::render(&self.anki_settings_state, self, cx)
+    }
+
     fn render_dictionaries_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
         dictionaries::render(&self.dictionaries_state, self, cx)
     }
@@ -631,75 +647,39 @@ impl Router {
         settings::render(&self.settings_state, cx.entity().clone(), self, cx)
     }
 
-    fn render_home_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        home::render(self, cx)
-    }
-
-    fn render_counter_screen(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        counter::render(self, cx)
-    }
-
     fn render_about_screen(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         about::render(self)
     }
 
-    fn render_apple_glass_screen(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        components::render_apple_glass(self)
+    /// Render the top app bar with navigation controls and screen title.
+    fn render_top_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme =
+            gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
+        let title = self.current_screen.title();
+
+        let mut bar = TopAppBar::center_aligned(title, theme);
+
+        if self.can_go_back() {
+            bar = bar.leading_icon("←", cx.listener(|this, _, _, cx| {
+                this.go_back();
+                cx.notify();
+            }));
+        }
+
+        bar.build()
     }
 
-    fn render_material_screen(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        components::render_material(self)
-    }
-
-    fn render_form_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        form::render(self, cx)
-    }
-
-    fn render_packages_demo_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        packages_demo::render(self, cx)
-    }
-
-    fn render_webview_browser_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        webview_browser::render(self, cx)
-    }
-
-    fn render_swiper_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        swiper::render(self, cx)
-    }
-
-    fn render_feed_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        feed::render(self, cx)
-    }
-
-    fn render_chat_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        chat::render(self, cx)
-    }
-
-    fn render_audio_player_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        audio_player::render(self, cx)
-    }
-
-    fn render_video_player_screen(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        video_player::render(self, window, cx)
-    }
-
-    // ── Demo screen content (rendered below the TopAppBar) ────────────────────
-
-    /// Render the Animations content area with touch handlers.
     fn render_animations_content(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        // Request continuous animation frames so physics keeps ticking.
         window.request_animation_frame();
 
-        // Ensure the playground exists.
         if self.animation_playground.is_none() {
             self.animation_playground = Some(AnimationPlayground::new());
         }
 
-        // Update bounds from the current viewport.
         let viewport = window.viewport_size();
         if let Some(playground) = &mut self.animation_playground {
             playground.set_bounds(Bounds {
@@ -721,18 +701,16 @@ impl Router {
                     }
                 }),
             )
-            .on_mouse_move(
-                cx.listener(|this, event: &MouseMoveEvent, _window, cx| {
-                    if let Some(playground) = &mut this.animation_playground {
-                        let pos = point(event.position.x.as_f32(), event.position.y.as_f32());
-                        if playground.touch_start.is_none() {
-                            playground.touch_start = Some((pos, std::time::Instant::now()));
-                        }
-                        playground.current_touch = Some(pos);
-                        cx.notify();
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _window, cx| {
+                if let Some(playground) = &mut this.animation_playground {
+                    let pos = point(event.position.x.as_f32(), event.position.y.as_f32());
+                    if playground.touch_start.is_none() {
+                        playground.touch_start = Some((pos, std::time::Instant::now()));
                     }
-                }),
-            )
+                    playground.current_touch = Some(pos);
+                    cx.notify();
+                }
+            }))
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseUpEvent, _window, cx| {
@@ -767,21 +745,17 @@ impl Router {
             })
     }
 
-    /// Render the Shaders content area with touch handlers.
     fn render_shaders_content(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        // Request continuous animation frames for the shader loop.
         window.request_animation_frame();
 
-        // Ensure the showcase exists.
         if self.shader_showcase.is_none() {
             self.shader_showcase = Some(ShaderShowcase::new());
         }
 
-        // Update screen center for parallax calculations.
         if let Some(showcase) = &mut self.shader_showcase {
             let viewport = window.viewport_size();
             showcase.set_screen_center(point(
@@ -826,4 +800,3 @@ impl Router {
             })
     }
 }
-

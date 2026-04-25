@@ -4,6 +4,8 @@
 mod android;
 #[cfg(target_os = "ios")]
 mod ios;
+#[cfg(target_os = "macos")]
+mod macos;
 
 use std::path::PathBuf;
 
@@ -17,9 +19,13 @@ pub fn temporary_directory() -> Result<PathBuf, String> {
     {
         android::temporary_directory()
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
     {
-        Err("path_provider is only available on iOS and Android".into())
+        macos::temporary_directory()
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
+    {
+        Err("path_provider is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -33,9 +39,13 @@ pub fn documents_directory() -> Result<PathBuf, String> {
     {
         android::documents_directory()
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
     {
-        Err("path_provider is only available on iOS and Android".into())
+        macos::documents_directory()
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
+    {
+        Err("path_provider is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -49,9 +59,13 @@ pub fn cache_directory() -> Result<PathBuf, String> {
     {
         android::cache_directory()
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
     {
-        Err("path_provider is only available on iOS and Android".into())
+        macos::cache_directory()
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
+    {
+        Err("path_provider is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -65,8 +79,12 @@ pub fn support_directory() -> Result<PathBuf, String> {
     {
         android::support_directory()
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
     {
-        Err("path_provider is only available on iOS and Android".into())
+        macos::support_directory()
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
+    {
+        Err("path_provider is only available on iOS, Android and macOS".into())
     }
 }
