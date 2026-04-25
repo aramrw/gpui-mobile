@@ -1,9 +1,60 @@
-# Showcase
-### iOS
-<img width="200" height="433" alt="ScreenRecording_04-25-2026 00-31-19_1" src="https://github.com/user-attachments/assets/f505afab-8726-45c6-895f-388755bed03f" />
+# GPUI Mobile
 
-### macOS
+Mobile platform support for GPUI — iOS (Metal) and Android (Vulkan).
 
-<img width="480" height="300" alt="Screenshot 2026-04-25 at 12 28 54 AM" src="https://github.com/user-attachments/assets/da0bca36-565e-4a59-992c-de2477f38a9d" />
+This fork provides the necessary platform implementations and packages to run GPUI applications on mobile devices. It also supports macOS as a desktop target.
 
+## Usage
 
+Add `gpui-mobile` to your `Cargo.toml`:
+
+```toml
+[dependencies]
+gpui-mobile = { git = "https://github.com/your-username/gpui-mobile", branch = "main" }
+```
+
+### Zero-Ceremony Entry Point
+
+Use the `#[gpui_mobile::main]` macro to automatically handle platform-specific initialization for macOS, iOS, and Android.
+
+```rust
+use gpui_mobile::gpui::{prelude::*, App, WindowOptions};
+
+#[gpui_mobile::main]
+fn main(cx: &mut App) {
+    cx.open_window(WindowOptions::default(), |_, cx| {
+        cx.new(|_| HelloWorld)
+    });
+}
+
+struct HelloWorld;
+impl Render for HelloWorld {
+    fn render(&mut self, _cx: &mut ViewContext<Self>) -> impl IntoElement {
+        div().child("Hello, GPUI Mobile!")
+    }
+}
+```
+
+## Examples
+
+Run the minimal example on macOS:
+
+```bash
+cargo run --example hello_world
+```
+
+## Platform Support
+
+- **iOS**: Metal renderer, UIKit integration.
+- **Android**: Vulkan renderer, NDK integration.
+- **macOS**: Metal renderer, AppKit integration.
+
+## Development
+
+During development, you can use a local path dependency:
+
+```toml
+gpui-mobile = { path = "../gpui-mobile" }
+```
+
+See `docs/` for architecture insights and platform-specific guides.
