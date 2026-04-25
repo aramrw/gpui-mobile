@@ -96,7 +96,7 @@ font-kit = { git = "https://github.com/zed-industries/font-kit", rev = "11052312
 # ── macOS ────────────────────────────────────────────────────────────────────
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui_macos = { path = "crates/gpui_macos" }
+gpui_macos = { path = "crates/gpui_macos", features = ["font-kit"] }
 dirs = "5"
 cocoa = "0.26"
 metal = "0.33"
