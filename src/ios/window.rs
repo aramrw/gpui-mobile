@@ -27,8 +27,8 @@ use objc::{
     class,
     declare::ClassDecl,
     msg_send,
-    runtime::{Class, Object, Sel, BOOL, NO, YES},
-    sel, sel_impl, sel_getName,
+    runtime::{Class, Object, Sel, BOOL, NO, YES, sel_getName},
+    sel, sel_impl,
 };
 use parking_lot::Mutex;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, UiKitDisplayHandle, UiKitWindowHandle};
@@ -324,7 +324,7 @@ fn register_text_input_view_class() -> &'static Class {
                 let pasteboard: *mut Object = msg_send![class!(UIPasteboard), generalPasteboard];
                 let string: *mut Object = msg_send![pasteboard, string];
                 if !string.is_null() {
-                    let c_str = NSString::UTF8String(string as *mut Object);
+                    let c_str: *const std::ffi::c_char = msg_send![string, UTF8String];
                     let text = std::ffi::CStr::from_ptr(c_str).to_string_lossy();
                     log::info!("GPUITextInputView paste: found text: {}", text);
                     window.handle_text_input_str(&text);

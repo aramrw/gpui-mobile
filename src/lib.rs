@@ -50,24 +50,25 @@
 //!
 //! ## Example — iOS
 //!
-//! ```rust,no_run
-//! # #[cfg(target_os = "ios")]
-//! # {
-//! use gpui_mobile::current_platform;
-//! let platform = current_platform(false);
-//! // Hand `platform` to GPUI's Application initialiser.
-//! # }
-//! ```
-//!
-//! ## Example — Android
-//!
-//! ```rust,no_run
-//! # #[cfg(target_os = "android")]
-//! # {
-//! use gpui_mobile::current_platform;
-//! let platform = current_platform(false);
-//! # }
-//! ```
+
+// ```rust,no_run
+// # #[cfg(target_os = "ios")]
+// # {
+// use gpui_mobile::current_platform;
+// let platform = current_platform(false);
+// // Hand `platform` to GPUI's Application initialiser.
+// # }
+// ```
+//
+// ## Example — Android
+//
+// ```rust,no_run
+// # #[cfg(target_os = "android")]
+// # {
+// use gpui_mobile::current_platform;
+// let platform = current_platform(false);
+// # }
+// ```
 
 // ── Re-export the gpui crate so consumers can access types through us ────────
 
