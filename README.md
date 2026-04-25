@@ -2,8 +2,7 @@
 
 Mobile platform support for GPUI — iOS (Metal) and Android (Vulkan).
 
-This fork provides the necessary platform implementations and packages to run GPUI applications on mobile devices. 
-It also supports macOS as a desktop target.
+This fork provides the necessary platform implementations and packages to run GPUI applications on mobile devices. It also supports macOS as a desktop target.
 
 ## Usage
 
@@ -11,12 +10,30 @@ Add `gpui-mobile` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gpui-mobile = { git = "https://github.com/your-aramrw/gpui-mobile", branch = "main" }
+gpui-mobile = { git = "https://github.com/your-username/gpui-mobile", branch = "main" }
 ```
 
-### Locking Revisions
+### Zero-Ceremony Entry Point
 
-To ensure stability against upstream GPUI changes, it is recommended to lock your dependencies to specific revisions in your `Cargo.toml`.
+Use the `#[gpui_mobile::main]` macro to automatically handle platform-specific initialization for macOS, iOS, and Android.
+
+```rust
+use gpui_mobile::gpui::{prelude::*, App, WindowOptions};
+
+#[gpui_mobile::main]
+fn main(cx: &mut App) {
+    cx.open_window(WindowOptions::default(), |_, cx| {
+        cx.new(|_| HelloWorld)
+    });
+}
+
+struct HelloWorld;
+impl Render for HelloWorld {
+    fn render(&mut self, _cx: &mut ViewContext<Self>) -> impl IntoElement {
+        div().child("Hello, GPUI Mobile!")
+    }
+}
+```
 
 ## Examples
 
@@ -33,5 +50,11 @@ cargo run --example hello_world
 - **macOS**: Metal renderer, AppKit integration.
 
 ## Development
+
+During development, you can use a local path dependency:
+
+```toml
+gpui-mobile = { path = "../gpui-mobile" }
+```
 
 See `docs/` for architecture insights and platform-specific guides.

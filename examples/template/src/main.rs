@@ -1,11 +1,9 @@
-use gpui::{prelude::*, App, WindowOptions, div};
+use gpui::{div, prelude::*, App, WindowOptions};
 
-fn main() {
-    App::new().run(|cx| {
-        cx.open_window(WindowOptions::default(), |_, cx| {
-            cx.new(|_| HelloWorld)
-        }).unwrap();
-    });
+#[gpui_mobile::main]
+fn main(cx: &mut App) {
+    cx.open_window(WindowOptions::default(), |_, cx| cx.new(|_| HelloWorld))
+        .unwrap();
 }
 
 struct HelloWorld;
@@ -18,5 +16,6 @@ impl Render for HelloWorld {
             .size_full()
             .bg(gpui::white())
             .child("GPUI Mobile Template")
+            .child(device_info)
     }
 }

@@ -73,12 +73,14 @@
 // ── Re-export the gpui crate so consumers can access types through us ────────
 
 pub use gpui;
+pub use gpui_mobile_macros::main;
 
 // ── shared modules ───────────────────────────────────────────────────────────
 
 pub mod components;
 pub mod momentum;
 pub mod packages;
+pub mod platform_info;
 pub mod platform_view;
 pub mod target_platform;
 
