@@ -64,12 +64,36 @@ use std::{
     sync::{
         Arc, Weak,
         atomic::{AtomicBool, Ordering},
+        OnceLock,
     },
     time::Duration,
 };
 use util::{ResultExt, input::dispatch_text_input};
 
 const WINDOW_STATE_IVAR: &str = "windowState";
+
+pub struct MacWindowList(pub Mutex<Vec<usize>>);
+unsafe impl Send for MacWindowList {}
+unsafe impl Sync for MacWindowList {}
+
+pub static MAC_WINDOW_LIST: OnceLock<MacWindowList> = OnceLock::new();
+
+fn push_window(window: *const MacWindow) {
+    let list = MAC_WINDOW_LIST.get_or_init(|| MacWindowList(Mutex::new(Vec::new())));
+    list.0.lock().push(window as usize);
+}
+
+fn remove_window(window: *const MacWindow) {
+    if let Some(list) = MAC_WINDOW_LIST.get() {
+        let mut vec = list.0.lock();
+        if let Some(pos) = vec.iter().position(|&x| x == window as usize) {
+            let ptr = vec.remove(pos);
+            unsafe {
+                let _ = Box::from_raw(ptr as *mut MacWindow);
+            }
+        }
+    }
+}
 
 static mut WINDOW_CLASS: *const Class = ptr::null();
 static mut PANEL_CLASS: *const Class = ptr::null();
@@ -325,6 +349,7 @@ unsafe fn build_window_class(name: &'static str, superclass: &Class) -> *const C
     unsafe {
         let mut decl = ClassDecl::new(name, superclass).unwrap();
         decl.add_ivar::<*mut c_void>(WINDOW_STATE_IVAR);
+        decl.add_ivar::<*mut c_void>("gpui_window_ptr");
         decl.add_method(sel!(dealloc), dealloc_window as extern "C" fn(&Object, Sel));
 
         decl.add_method(
@@ -619,7 +644,8 @@ impl MacWindowState {
 
 unsafe impl Send for MacWindowState {}
 
-pub(crate) struct MacWindow(Arc<Mutex<MacWindowState>>);
+#[derive(Clone)]
+pub struct MacWindow(Arc<Mutex<MacWindowState>>);
 
 impl MacWindow {
     pub fn open(
@@ -746,7 +772,7 @@ impl MacWindow {
             let native_view = NSView::initWithFrame_(native_view, NSView::bounds(content_view));
             assert!(!native_view.is_null());
 
-            let mut window = Self(Arc::new(Mutex::new(MacWindowState {
+            let window = Self(Arc::new(Mutex::new(MacWindowState {
                 handle,
                 foreground_executor,
                 background_executor,
@@ -795,11 +821,17 @@ impl MacWindow {
                 sheet_parent: None,
             })));
 
+            let mut window = window;
+
+            let window_ptr = Box::into_raw(Box::new(window.clone()));
+            push_window(window_ptr);
+
             (*native_window).set_ivar(
                 WINDOW_STATE_IVAR,
                 Arc::into_raw(window.0.clone()) as *const c_void,
             );
             native_window.setDelegate_(native_window);
+            (*native_window).set_ivar("gpui_window_ptr", window_ptr as *const c_void);
             (*native_view).set_ivar(
                 WINDOW_STATE_IVAR,
                 Arc::into_raw(window.0.clone()) as *const c_void,
@@ -947,11 +979,6 @@ impl MacWindow {
             // the window position might be incorrect if the main screen (the screen that contains the window that has focus)
             //  is different from the primary screen.
             NSWindow::setFrameTopLeftPoint_(native_window, window_rect.origin);
-            {
-                let mut window_state = window.0.lock();
-                window_state.move_traffic_light();
-                window_state.sheet_parent = sheet_parent;
-            }
 
             pool.drain();
 
@@ -1021,11 +1048,27 @@ impl MacWindow {
             }
         }
     }
+
+    pub fn platform_window(&self) -> id {
+        self.0.lock().native_window
+    }
+
+    pub fn metal_view_ptr(&self) -> *mut Object {
+        self.0.lock().native_view.as_ptr()
+    }
 }
 
 impl Drop for MacWindow {
     fn drop(&mut self) {
         let mut this = self.0.lock();
+        unsafe {
+            if let Some(native_window) = this.native_window.as_ref() {
+                let window_ptr: *mut c_void = *native_window.get_ivar("gpui_window_ptr");
+                if !window_ptr.is_null() {
+                    remove_window(window_ptr as *const MacWindow);
+                }
+            }
+        }
         this.renderer.destroy();
         let window = this.native_window;
         let sheet_parent = this.sheet_parent.take();

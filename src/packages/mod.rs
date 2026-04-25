@@ -92,3 +92,6 @@ pub mod deeplink;
 
 #[cfg(feature = "microphone")]
 pub mod microphone;
+
+#[cfg(feature = "barcode_scanner")]
+pub mod barcode_scanner;
