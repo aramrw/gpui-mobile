@@ -35,6 +35,54 @@ impl AnkiSettingsState {
         }
     }
 
+    pub fn apply_existing_mappings(&mut self, mappings: Vec<AnkiTermFieldType>) {
+        self.field_mappings = vec![None; self.model_fields.len()];
+        for mapping in mappings {
+            match mapping {
+                AnkiTermFieldType::Term(name) => {
+                    if let Some(i) = self.model_fields.iter().position(|f| f == &name) {
+                        self.field_mappings[i] = Some(AnkiField::Term);
+                    }
+                }
+                AnkiTermFieldType::Reading(name) => {
+                    if let Some(i) = self.model_fields.iter().position(|f| f == &name) {
+                        self.field_mappings[i] = Some(AnkiField::Reading);
+                    }
+                }
+                AnkiTermFieldType::Sentence(name) => {
+                    if let Some(i) = self.model_fields.iter().position(|f| f == &name) {
+                        self.field_mappings[i] = Some(AnkiField::Sentence);
+                    }
+                }
+                AnkiTermFieldType::Definition(name) => {
+                    if let Some(i) = self.model_fields.iter().position(|f| f == &name) {
+                        self.field_mappings[i] = Some(AnkiField::Definition);
+                    }
+                }
+                AnkiTermFieldType::TermAudio(name) => {
+                    if let Some(i) = self.model_fields.iter().position(|f| f == &name) {
+                        self.field_mappings[i] = Some(AnkiField::TermAudio);
+                    }
+                }
+                AnkiTermFieldType::SentenceAudio(name) => {
+                    if let Some(i) = self.model_fields.iter().position(|f| f == &name) {
+                        self.field_mappings[i] = Some(AnkiField::SentenceAudio);
+                    }
+                }
+                AnkiTermFieldType::Image(name) => {
+                    if let Some(i) = self.model_fields.iter().position(|f| f == &name) {
+                        self.field_mappings[i] = Some(AnkiField::Image);
+                    }
+                }
+                AnkiTermFieldType::Frequency(name) => {
+                    if let Some(i) = self.model_fields.iter().position(|f| f == &name) {
+                        self.field_mappings[i] = Some(AnkiField::Frequency);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn refresh_anki_data(
         this: &Entity<Self>,
         global_yomichan: crate::GlobalYomichan,
@@ -57,8 +105,8 @@ impl AnkiSettingsState {
                     let models = anki.model_names();
                     
                     let (sd, sm, mappings) = {
-                        let profile = anki.options().read().get_current_profile().ok();
-                        let fields = profile.and_then(|p| p.read().anki_options().anki_fields().clone());
+                        let profile_ptr = anki.options().read().get_current_profile().ok();
+                        let fields = profile_ptr.and_then(|p| p.read().anki_options().anki_fields().clone());
                         (
                             fields.as_ref().map(|f| *f.selected_deck()), 
                             fields.as_ref().map(|f| *f.selected_model()),
@@ -76,56 +124,10 @@ impl AnkiSettingsState {
                     s.model_names = models;
                     s.selected_deck = selected_deck;
                     s.selected_model = selected_model;
-                    let len = model_fields.len();
                     s.model_fields = model_fields;
-                    s.field_mappings = vec![None; len];
+                    s.apply_existing_mappings(existing_mappings);
                     
-                    for mapping in existing_mappings {
-                        match mapping {
-                            AnkiTermFieldType::Term(name) => {
-                                if let Some(i) = s.model_fields.iter().position(|f| f == &name) {
-                                    s.field_mappings[i] = Some(AnkiField::Term);
-                                }
-                            }
-                            AnkiTermFieldType::Reading(name) => {
-                                if let Some(i) = s.model_fields.iter().position(|f| f == &name) {
-                                    s.field_mappings[i] = Some(AnkiField::Reading);
-                                }
-                            }
-                            AnkiTermFieldType::Sentence(name) => {
-                                if let Some(i) = s.model_fields.iter().position(|f| f == &name) {
-                                    s.field_mappings[i] = Some(AnkiField::Sentence);
-                                }
-                            }
-                            AnkiTermFieldType::Definition(name) => {
-                                if let Some(i) = s.model_fields.iter().position(|f| f == &name) {
-                                    s.field_mappings[i] = Some(AnkiField::Definition);
-                                }
-                            }
-                            AnkiTermFieldType::TermAudio(name) => {
-                                if let Some(i) = s.model_fields.iter().position(|f| f == &name) {
-                                    s.field_mappings[i] = Some(AnkiField::TermAudio);
-                                }
-                            }
-                            AnkiTermFieldType::SentenceAudio(name) => {
-                                if let Some(i) = s.model_fields.iter().position(|f| f == &name) {
-                                    s.field_mappings[i] = Some(AnkiField::SentenceAudio);
-                                }
-                            }
-                            AnkiTermFieldType::Image(name) => {
-                                if let Some(i) = s.model_fields.iter().position(|f| f == &name) {
-                                    s.field_mappings[i] = Some(AnkiField::Image);
-                                }
-                            }
-                            AnkiTermFieldType::Frequency(name) => {
-                                if let Some(i) = s.model_fields.iter().position(|f| f == &name) {
-                                    s.field_mappings[i] = Some(AnkiField::Frequency);
-                                }
-                            }
-                        }
-                    }
-                    
-                    s.field_dropdowns_open = vec![false; len];
+                    s.field_dropdowns_open = vec![false; s.model_fields.len()];
                     s.loading = false;
                     cx.notify();
                 }).ok();
@@ -144,19 +146,26 @@ impl AnkiSettingsState {
     }
 
     pub fn select_model(this: &Entity<Self>, idx: usize, global_yomichan: crate::GlobalYomichan, cx: &mut Context<Router>) {
-        let fields = {
+        let (fields, existing_mappings) = {
             let ycd = global_yomichan.read();
             let anki = ycd.anki();
             let _ = anki.select_model(idx);
-            anki.field_names(idx)
+            let model_fields = anki.field_names(idx);
+
+            let mappings = {
+                let profile = anki.options().read().get_current_profile().ok();
+                let fields = profile.and_then(|p| p.read().anki_options().anki_fields().clone());
+                fields.map(|f| f.fields().clone()).unwrap_or_default()
+            };
+
+            (model_fields, mappings)
         };
         
         this.update(cx, |s, _| {
             s.selected_model = Some(idx);
-            let len: usize = fields.len();
             s.model_fields = fields;
-            s.field_mappings = vec![None; len];
-            s.field_dropdowns_open = vec![false; len];
+            s.apply_existing_mappings(existing_mappings);
+            s.field_dropdowns_open = vec![false; s.model_fields.len()];
             s.model_dropdown_open = false;
         });
         cx.notify();
@@ -192,8 +201,12 @@ impl AnkiSettingsState {
         }
 
         let ycd = global_yomichan.read();
-        let _ = ycd.anki().set_field_mappings(&mappings);
-        let _ = ycd.update_options();
+        if let Err(e) = ycd.anki().set_field_mappings(&mappings) {
+            log::error!("Failed to set field mappings: {:?}", e);
+        }
+        if let Err(e) = ycd.update_options() {
+            log::error!("Failed to update options: {:?}", e);
+        }
         log::info!("Anki settings saved");
     }
 }
