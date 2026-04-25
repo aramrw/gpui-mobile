@@ -447,12 +447,23 @@ impl Render for Router {
         // Apply to the OS-level status bar / navigation bar.
         set_system_chrome(&chrome);
 
+        let is_fullscreen_demo =
+            matches!(self.current_screen, Screen::Animations | Screen::Shaders);
+
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(bg_color))
             .text_color(rgb(text_color))
+            // ── Top safe-area spacer (status bar / notch) ────────────────
+            .when(safe_top > 0.0, |d| {
+                d.child(div().w_full().h(px(safe_top)).bg(rgb(top_color)))
+            })
+            // ── Top app bar (iOS only, pushed below safe area) ───────────
+            .when(cfg!(target_os = "ios") && !is_fullscreen_demo, |d| {
+                d.child(self.render_top_bar(cx))
+            })
             // ── Screen content ───────────────────────────────────────────
             .child(self.render_current_screen(window, cx))
             // ── Bottom tab bar (only for tab-root screens) ───────────────
@@ -638,6 +649,24 @@ impl Router {
 
     fn render_about_screen(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         about::render(self)
+    }
+
+    /// Render the top app bar with navigation controls and screen title.
+    fn render_top_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme =
+            gpui_mobile::components::material::MaterialTheme::from_appearance(self.dark_mode);
+        let title = self.current_screen.title();
+
+        let mut bar = TopAppBar::center_aligned(title, theme);
+
+        if self.can_go_back() {
+            bar = bar.leading_icon("←", cx.listener(|this, _, _, cx| {
+                this.go_back();
+                cx.notify();
+            }));
+        }
+
+        bar.build()
     }
 
     fn render_animations_content(
