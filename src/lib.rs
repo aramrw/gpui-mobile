@@ -320,6 +320,7 @@ pub mod android;
 
 #[cfg(target_os = "macos")]
 pub mod macos {
+    pub mod platform_view;
     pub use gpui_macos::*;
 }
 

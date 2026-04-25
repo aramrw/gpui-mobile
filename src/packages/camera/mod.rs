@@ -4,6 +4,7 @@
 //! Provides a cross-platform camera API backed by:
 //! - iOS: AVFoundation (`AVCaptureSession`, `AVCaptureDevice`) via Objective-C
 //! - Android: Camera2 API via JNI
+//! - macOS: AVFoundation via Objective-C
 //!
 //! Inspired by [camera](https://pub.dev/packages/camera).
 //!
@@ -13,6 +14,8 @@
 mod android;
 #[cfg(target_os = "ios")]
 mod ios;
+#[cfg(target_os = "macos")]
+pub mod macos;
 
 use crate::platform_view::{
     PlatformViewBounds, PlatformViewHandle, PlatformViewParams, PlatformViewRegistry,
@@ -117,6 +120,14 @@ fn ensure_factory_registered() {
                 Box::new(IosPlatformViewFactory::new("camera_preview")),
             );
         }
+        #[cfg(target_os = "macos")]
+        {
+            use crate::macos::platform_view::MacPlatformViewFactory;
+            registry.register(
+                "camera_preview",
+                Box::new(MacPlatformViewFactory::new("camera_preview")),
+            );
+        }
     }
 }
 
@@ -126,6 +137,12 @@ fn ensure_factory_registered() {
 #[cfg(target_os = "ios")]
 pub fn ios_get_session(id: usize) -> Option<*mut objc::runtime::Object> {
     ios::get_session_ptr(id)
+}
+
+/// Get the raw AVCaptureSession pointer for a given session ID (macOS only).
+#[cfg(target_os = "macos")]
+pub fn macos_get_session(id: usize) -> Option<*mut objc::runtime::Object> {
+    macos::macos_get_session(id)
 }
 
 /// Result of a photo capture.
@@ -158,9 +175,13 @@ pub fn available_cameras() -> Result<Vec<CameraDescription>, String> {
     {
         android::available_cameras()
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
     {
-        Err("camera is only available on iOS and Android".into())
+        macos::available_cameras()
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
+    {
+        Err("camera is not supported on this platform".into())
     }
 }
 
@@ -180,10 +201,15 @@ pub fn create_camera(
         android::create_camera(camera, resolution, enable_audio)
             .map(|id| CameraHandle { id, preview_handle: None })
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::create_camera(camera, resolution, enable_audio)
+            .map(|id| CameraHandle { id, preview_handle: None })
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = (camera, resolution, enable_audio);
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is not supported on this platform".into())
     }
 }
 
@@ -220,6 +246,10 @@ pub fn stop_preview(handle: &mut CameraHandle) -> Result<(), String> {
     {
         android::stop_preview_session(handle)?;
     }
+    #[cfg(target_os = "macos")]
+    {
+        macos::stop_preview_session(handle)?;
+    }
     Ok(())
 }
 
@@ -240,10 +270,14 @@ pub fn take_picture(handle: &CameraHandle) -> Result<CapturedImage, String> {
     {
         android::take_picture(handle)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::take_picture(handle)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = handle;
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -257,10 +291,14 @@ pub fn start_video_recording(handle: &CameraHandle) -> Result<(), String> {
     {
         android::start_video_recording(handle)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::start_video_recording(handle)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = handle;
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -274,10 +312,14 @@ pub fn stop_video_recording(handle: &CameraHandle) -> Result<RecordedVideo, Stri
     {
         android::stop_video_recording(handle)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::stop_video_recording(handle)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = handle;
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -291,10 +333,14 @@ pub fn set_flash_mode(handle: &CameraHandle, mode: FlashMode) -> Result<(), Stri
     {
         android::set_flash_mode(handle, mode)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::set_flash_mode(handle, mode)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = (handle, mode);
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -308,10 +354,14 @@ pub fn set_focus_mode(handle: &CameraHandle, mode: FocusMode) -> Result<(), Stri
     {
         android::set_focus_mode(handle, mode)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::set_focus_mode(handle, mode)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = (handle, mode);
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -325,10 +375,14 @@ pub fn set_exposure_mode(handle: &CameraHandle, mode: ExposureMode) -> Result<()
     {
         android::set_exposure_mode(handle, mode)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::set_exposure_mode(handle, mode)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = (handle, mode);
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -342,10 +396,14 @@ pub fn get_min_zoom(handle: &CameraHandle) -> Result<f64, String> {
     {
         android::get_min_zoom(handle)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::get_min_zoom(handle)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = handle;
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -359,10 +417,14 @@ pub fn get_max_zoom(handle: &CameraHandle) -> Result<f64, String> {
     {
         android::get_max_zoom(handle)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::get_max_zoom(handle)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = handle;
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -376,10 +438,14 @@ pub fn set_zoom(handle: &CameraHandle, zoom: f64) -> Result<(), String> {
     {
         android::set_zoom(handle, zoom)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::set_zoom(handle, zoom)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = (handle, zoom);
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -393,10 +459,14 @@ pub fn set_camera(handle: &CameraHandle, camera: &CameraDescription) -> Result<(
     {
         android::set_camera(handle, camera)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::set_camera(handle, camera)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = (handle, camera);
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }
 
@@ -414,9 +484,13 @@ pub fn dispose(mut handle: CameraHandle) -> Result<(), String> {
     {
         android::dispose(handle)
     }
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::dispose(handle)
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android", target_os = "macos")))]
     {
         let _ = handle;
-        Err("camera is only available on iOS and Android".into())
+        Err("camera is only available on iOS, Android and macOS".into())
     }
 }

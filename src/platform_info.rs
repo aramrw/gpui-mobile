@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use crate::packages::{path_provider, device_info, vibration};
+use crate::packages::{path_provider, device_info, vibration, barcode_scanner};
 
 /// Standard directory paths for the current platform.
 pub struct Paths;
@@ -39,6 +39,30 @@ impl Haptics {
     /// Vibrate the device for a given duration.
     pub fn vibrate(duration_ms: u32) -> Result<(), String> {
         vibration::vibrate(duration_ms)
+    }
+}
+
+/// Native barcode scanner.
+pub struct Barcode;
+
+impl Barcode {
+    /// Get the raw AVCaptureSession pointer (macOS only).
+    #[cfg(target_os = "macos")]
+    pub fn macos_get_session() -> Option<*mut objc::runtime::Object> {
+        barcode_scanner::macos_get_session()
+    }
+
+    /// Start scanning for barcodes.
+    pub fn scan<F>(on_scan: F) -> Result<(), String>
+    where
+        F: Fn(String) + Send + Sync + 'static,
+    {
+        barcode_scanner::scan(on_scan)
+    }
+
+    /// Stop the barcode scanner.
+    pub fn stop() -> Result<(), String> {
+        barcode_scanner::stop()
     }
 }
 
