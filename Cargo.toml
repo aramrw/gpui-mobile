@@ -1,0 +1,169 @@
+[package]
+name = "gpui-mobile"
+version = "0.1.0"
+edition = "2021"
+authors = ["Balamurali Pandranki <balamurali@live.com>"]
+license = "GPL-3.0-or-later OR AGPL-3.0-or-later OR Apache-2.0"
+description = "Mobile platform support for GPUI — iOS (wpgu/Metal) and Android (wgpu/Vulkan)"
+repository = "https://github.com/itsbalamurali/gpui-mobile"
+homepage = "https://github.com/itsbalamurali/gpui-mobile"
+keywords = ["gui", "mobile", "ios", "android", "gpui"]
+categories = ["gui", "os"]
+readme = "README.md"
+
+[features]
+default = ["url_launcher", "shared_preferences", "path_provider",
+           "package_info", "device_info", "connectivity", "network_info", "vibration",
+           "battery", "share", "sensors", "webview", "file_selector", "image_picker", "camera",
+           "permission_handler", "notifications", "location", "audio", "video_player",
+           "clipboard", "local_auth", "in_app_review", "contacts", "maps_launcher",
+           "calendar", "deeplink", "microphone", "maps", "media_session", "font-kit"]
+font-kit = []
+url_launcher = []
+shared_preferences = []
+path_provider = []
+package_info = []
+device_info = []
+connectivity = []
+network_info = []
+vibration = []
+battery = []
+share = []
+sensors = []
+webview = []
+file_selector = ["dep:rfd"]
+image_picker = []
+camera = []
+permission_handler = []
+notifications = []
+location = []
+audio = []
+video_player = []
+clipboard = ["dep:arboard"]
+local_auth = []
+in_app_review = []
+contacts = []
+maps_launcher = []
+maps = []
+calendar = []
+deeplink = []
+microphone = []
+media_session = []
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+# ── shared deps (all platforms) ──────────────────────────────────────────────
+
+
+[dependencies]
+gpui_mobile_macros = { path = "crates/gpui_mobile_macros" }
+anyhow       = "1"
+log          = { version = "0.4", features = ["kv_unstable_serde", "serde"] }
+parking_lot  = "0.12"
+futures      = "0.3"
+raw-window-handle = "0.6"
+gpui_util    = { path = "crates/gpui_util" }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c", package = "gpui", default-features = false }
+
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+rfd          = { version = "0.15", optional = true }
+arboard      = { version = "3.4", optional = true }
+
+# ── iOS ──────────────────────────────────────────────────────────────────────
+
+[target.'cfg(target_os = "ios")'.dependencies]
+# Objective-C runtime
+objc = "0.2"
+
+# Apple frameworks
+core-foundation     = "0.10"
+core-foundation-sys = "0.8"
+core-graphics       = "0.24"
+core-text           = "=21.0.0"
+uuid                = { version = "1", features = ["v4", "v5"] }
+block               = "0.1"
+
+# wgpu renderer (Metal backend on iOS) — local fork from Zed with Android surface replacement
+gpui_wgpu = { path = "crates/gpui_wgpu", features = ["font-kit"] }
+wgpu = "28.0"
+
+# Text / font stack
+pathfinder_geometry = "0.5"
+smallvec            = { version = "1.6", features = ["union", "const_new"] }
+
+# font-kit (same pin as gpui upstream)
+font-kit = { git = "https://github.com/zed-industries/font-kit", rev = "110523127440aefb11ce0cf280ae7c5071337ec5", package = "zed-font-kit", version = "0.14.1-zed" }
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_macos = { path = "crates/gpui_macos", features = ["font-kit"] }
+dirs = "5"
+cocoa = "0.26"
+metal = "0.33"
+objc = "0.2"
+objc2-app-kit = "0.2.2"
+core-foundation = "0.10"
+core-graphics = "0.24"
+core-text = "21"
+core-video = "0.5"
+dispatch2 = "0.3.1"
+block = "0.1"
+ctor = "0.2"
+parking_lot = "0.12"
+smallvec = "1"
+anyhow = "1"
+log = "0.4"
+futures = "0.3"
+uuid = "1"
+
+# ── Android ──────────────────────────────────────────────────────────────────
+
+[target.'cfg(target_os = "android")'.dependencies]
+# JNI / NDK bindings
+jni         = "0.22"
+ndk         = { version = "0.9", features = ["nativewindow", "api-level-31"] }
+ndk-context = "0.1"
+ndk-sys     = "0.6"
+
+# Activity glue layer
+android-activity = { version = "0.6", features = ["native-activity"] }
+
+# Logging to logcat
+android_logger = "0.15"
+
+# gpui_wgpu — local fork from Zed repo with Android surface replacement support
+gpui_wgpu = { path = "crates/gpui_wgpu", features = ["font-kit"] }
+
+# rustc-hash is required by the PlatformKeyboardMapper trait signature
+rustc-hash = "2"
+uuid       = { version = "1", features = ["v5"] }
+
+# ── dev ──────────────────────────────────────────────────────────────────────
+
+[dev-dependencies]
+
+# ── patch: match Zed's pinned forks ──────────────────────────────────────────
+# These patches ensure that transitive deps from gpui/gpui_wgpu resolve
+# the same forked versions that the Zed workspace uses.
+
+[patch.crates-io]
+async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
+
+[patch."https://github.com/zed-industries/zed"]
+gpui_util = { path = "crates/gpui_util" }
+collections = { path = "crates/collections" }
+gpui_macos = { path = "crates/gpui_macos" }
+
+# ── profiles ─────────────────────────────────────────────────────────────────
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = true
+
+[profile.dev]
+opt-level = 0
+debug     = true

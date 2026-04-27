@@ -1,0 +1,14 @@
+[package]
+name = "gpui-mobile-showcase"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4"
+gpui-mobile = { path = "../.." }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "4dd42a0f77b11d0bed2a072919bcd9180b9a577c" }
+
+[patch."https://github.com/zed-industries/zed"]
+gpui_util = { path = "../../crates/gpui_util" }
+collections = { path = "../../crates/collections" }
+gpui_macos = { path = "../../crates/gpui_macos" }

@@ -1,0 +1,42 @@
+name: GpuiTemplate
+options:
+  bundleIdPrefix: dev.gpui
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    SDKROOT: iphoneos
+    SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+targets:
+  GpuiTemplate:
+    type: bundle.unit-test # Using a bundle type that matches the original pattern
+    platform: iOS
+    sources:
+      - path: .
+    preBuildScripts:
+      - name: "Build Rust Static Library"
+        script: |
+          set -e
+          export PATH="$PATH:$HOME/.cargo/bin"
+          
+          RUST_PROJECT_DIR="${PROJECT_DIR}/.."
+          cd "${RUST_PROJECT_DIR}"
+          
+          # Default to release for performance as requested
+          export CARGO_FLAGS="--release"
+          export RUSTFLAGS="-Awarnings"
+          
+          # Detect target
+          if [ "${PLATFORM_NAME}" == "iphonesimulator" ]; then
+              RUST_TARGET="aarch64-apple-ios-sim"
+          else
+              RUST_TARGET="aarch64-apple-ios"
+          fi
+          
+          cargo build --target "${RUST_TARGET}" ${CARGO_FLAGS}
+        shell: /bin/bash
