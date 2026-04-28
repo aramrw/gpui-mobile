@@ -14,5 +14,5 @@ doctest = false
 test-support = []
 
 [dependencies]
-indexmap = "2"
+indexmap = { version = "2", features = ["serde"] }
 rustc-hash = "2"
