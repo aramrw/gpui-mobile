@@ -34,11 +34,10 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         #[cfg(target_os = "ios")]
         #[unsafe(no_mangle)]
-        pub extern "C" fn gpui_ios_main() {
+        pub extern "C" fn gpui_ios_register_app() {
             gpui_mobile::ios::ffi::set_app_callback(Box::new(|cx| {
                 #user_fn_name(cx);
             }));
-            gpui_mobile::ios::ffi::run_app();
         }
 
         #[cfg(target_os = "android")]
